@@ -30,7 +30,7 @@ def build_example(annotation, class_map, images_dir):
     img_raw = open(img_path, 'rb').read()
     key = hashlib.sha256(img_raw).hexdigest()
 
-    try
+    try:
         width = int(annotation['size']['width'])
         height = int(annotation['size']['height'])
     except KeyError:
