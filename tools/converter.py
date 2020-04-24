@@ -8,6 +8,8 @@ import tensorflow as tf
 import lxml.etree
 import tqdm
 
+from PIL import Image
+
 flags.DEFINE_string('train_labels_dir', '/run/media/juju/backup_loja/set_03/train_label',
                     'path to raw PASCAL VOC dataset')
 flags.DEFINE_string('val_labels_dir', '/run/media/juju/backup_loja/set_03/val_label',
@@ -28,8 +30,12 @@ def build_example(annotation, class_map, images_dir):
     img_raw = open(img_path, 'rb').read()
     key = hashlib.sha256(img_raw).hexdigest()
 
-    width = int(annotation['size']['width'])
-    height = int(annotation['size']['height'])
+    try
+        width = int(annotation['size']['width'])
+        height = int(annotation['size']['height'])
+    except KeyError:
+        im = Image.open(img_path)
+        width, height = im.size
 
     width = width if width > 0 else 416
     height = height if height > 0 else 416
