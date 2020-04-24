@@ -75,7 +75,8 @@ python tools/converter.py                    \
     --train_data_dir ${FACE_TRAIN_DATA}      \
     --train_labels_dir ${FACE_TRAIN_LABELS}  \
     --val_data_dir ${FACE_VAL_DATA}          \
-    --val_labels_dir ${FACE_VAL_LABELS}
+    --val_labels_dir ${FACE_VAL_LABELS}      \
+    || exit
 
 python train.py                                    \
     --dataset ${FACE_TRAIN_RECORD}                 \
@@ -87,7 +88,8 @@ python train.py                                    \
     --epochs ${EPOCHS}                             \
     --weights ${WEIGHTS}                           \
     --checkpoints ${CHECKPOINTS_FOLDER}/face/train \
-    --weights_num_classes 80
+    --weights_num_classes 80                       \
+    || exit
 
 python train.py                                         \
     --dataset ${FACE_TRAIN_RECORD}                      \
