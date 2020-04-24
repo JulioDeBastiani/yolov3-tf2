@@ -101,6 +101,9 @@ def parse_set(class_map, out_file, annotations_dir, images_dir):
     writer = tf.io.TFRecordWriter(out_file)
 
     for annotation_file in tqdm.tqdm(os.listdir(annotations_dir)):
+        if not annotation_file.endswith('.xml'):
+            continue
+
         # print("file: " + annotation_file)
         annotation_xml = os.path.join(annotations_dir, annotation_file)
         annotation_xml = lxml.etree.fromstring(open(annotation_xml).read())
