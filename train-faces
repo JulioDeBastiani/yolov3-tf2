@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/zsh
 
 WEIGHTS=/run/media/juju/backup_loja/checkpoints/regular/train/yolov3.tf
 WEIGHTS_TINY=/run/media/juju/backup_loja/checkpoints/tiny/train/yolov3-tiny.tf
