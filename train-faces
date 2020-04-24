@@ -21,7 +21,6 @@ while [ $# -gt 0 ]; do
             echo "convenience script for training yolo versions"
             echo "available options are:"
             echo "    -h|--help: show this help message"
-            echo "    --person-set: name of the person set, defaults to $PERSON_SET"
             echo "    --face-set: number of the face set, defaults to $FACE_SET"
             echo "    --checkpoints-folder: checkpoints root folder, defaults $CHECKPOINTS_FOLDER"
             echo "    --epochs: number of epochs to train, defaults to $EPOCHS"
@@ -64,10 +63,10 @@ done
 # face detector
 FACE_TRAIN_RECORD=${FACE_SET_FOLDER}/${FACE_SET}_train.tfrecord
 FACE_VAL_RECORD=${FACE_SET_FOLDER}/${FACE_SET}_val.tfrecord
-FACE_TRAIN_DATA=${FACEOT_FOLDER}/${FACE_SET}/train
-FACE_TRAIN_LABELS=${FACEOT_FOLDER}/${FACE_SET}/train
-FACE_VAL_DATA=${FACEOT_FOLDER}/${FACE_SET}/val
-FACE_VAL_LABELS=${FACEOT_FOLDER}/${FACE_SET}/val
+FACE_TRAIN_DATA=${FACE_SET_FOLDER}/${FACE_SET}/train
+FACE_TRAIN_LABELS=${FACE_SET_FOLDER}/${FACE_SET}/train
+FACE_VAL_DATA=${FACE_SET_FOLDER}/${FACE_SET}/val
+FACE_VAL_LABELS=${FACE_SET_FOLDER}/${FACE_SET}/val
 
 python tools/converter.py                    \
     --classes ./data/face-det.names          \
