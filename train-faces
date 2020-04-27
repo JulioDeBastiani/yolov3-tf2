@@ -82,7 +82,7 @@ python train.py                                    \
     --dataset ${FACE_TRAIN_RECORD}                 \
     --val_dataset ${FACE_VAL_RECORD}               \
     --classes ./data/face-det.names                \
-    --num_classes 1                                \
+    --num_classes 2                                \
     --mode fit --transfer darknet                  \
     --batch_size ${BATCH_SIZE}                     \
     --epochs ${EPOCHS}                             \
@@ -95,7 +95,7 @@ python train.py                                         \
     --dataset ${FACE_TRAIN_RECORD}                      \
     --val_dataset ${FACE_VAL_RECORD}                    \
     --classes ./data/face-det.names                     \
-    --num_classes 1                                     \
+    --num_classes 2                                     \
     --mode fit --transfer darknet                       \
     --batch_size ${BATCH_SIZE}                          \
     --epochs ${EPOCHS}                                  \

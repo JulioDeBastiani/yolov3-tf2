@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/zsh
 
 WEIGHTS=/run/media/juju/backup_loja/checkpoints/regular/train/yolov3.tf
 WEIGHTS_TINY=/run/media/juju/backup_loja/checkpoints/tiny/train/yolov3-tiny.tf
@@ -104,47 +104,4 @@ python train.py                                           \
     --weights ${WEIGHTS_TINY}                             \
     --checkpoints ${CHECKPOINTS_FOLDER}/person-tiny/train \
     --weights_num_classes 80                              \
-    --tiny
-
-
-# face detector
-FACE_TRAIN_RECORD=${FACE_SET_FOLDER}/set_${FACE_SET_NUMBER}_train.tfrecord
-FACE_VAL_RECORD=${FACE_SET_FOLDER}/set_${FACE_SET_NUMBER}_val.tfrecord
-FACE_TRAIN_DATA=${FACEOT_FOLDER}/set_${FACE_SET_NUMBER}/train_data
-FACE_TRAIN_LABELS=${FACEOT_FOLDER}/set_${FACE_SET_NUMBER}/train_label
-FACE_VAL_DATA=${FACEOT_FOLDER}/set_${FACE_SET_NUMBER}/val_data
-FACE_VAL_LABELS=${FACEOT_FOLDER}/set_${FACE_SET_NUMBER}/val_label
-
-python tools/converter.py                    \
-    --classes ./data/person-det.names        \
-    --output_train_file ${FACE_TRAIN_RECORD} \
-    --output_val_file ${FACE_VAL_RECORD}     \
-    --train_data_dir ${FACE_TRAIN_DATA}      \
-    --train_labels_dir ${FACE_TRAIN_LABELS}  \
-    --val_data_dir ${FACE_VAL_DATA}          \
-    --val_labels_dir ${FACE_VAL_LABELS}
-
-python train.py                                    \
-    --dataset ${FACE_TRAIN_RECORD}                 \
-    --val_dataset ${FACE_VAL_RECORD}               \
-    --classes ./data/person-det.names              \
-    --num_classes 1                                \
-    --mode fit --transfer darknet                  \
-    --batch_size ${BATCH_SIZE}                     \
-    --epochs ${EPOCHS}                             \
-    --weights ${WEIGHTS}                           \
-    --checkpoints ${CHECKPOINTS_FOLDER}/face/train \
-    --weights_num_classes 80
-
-python train.py                                         \
-    --dataset ${FACE_TRAIN_RECORD}                      \
-    --val_dataset ${FACE_VAL_RECORD}                    \
-    --classes ./data/person-det.names                   \
-    --num_classes 1                                     \
-    --mode fit --transfer darknet                       \
-    --batch_size ${BATCH_SIZE}                          \
-    --epochs ${EPOCHS}                                  \
-    --weights ${WEIGHTS_TINY}                           \
-    --checkpoints ${CHECKPOINTS_FOLDER}/face-tiny/train \
-    --weights_num_classes 80                            \
     --tiny

@@ -30,6 +30,11 @@ def build_example(annotation, class_map, images_dir):
     img_raw = open(img_path, 'rb').read()
     key = hashlib.sha256(img_raw).hexdigest()
 
+    if img_raw[0] != 255 and img_raw[0] != 137:
+        print(f"raw {img_raw[0]}")
+        print(f"bad image {img_path}")
+        raise Exception("bad image")
+
     try:
         width = int(annotation['size']['width'])
         height = int(annotation['size']['height'])
@@ -52,7 +57,25 @@ def build_example(annotation, class_map, images_dir):
     if 'object' in annotation:
         for obj in annotation['object']:
             if not obj['name'] in class_map:
+                print(f"weird name {obj['name']}")
                 continue
+
+            if float(obj['bndbox']['xmin']) > width or float(obj['bndbox']['xmin']) < 0:
+                print(f"bad xmin {obj['bndbox']['xmin']}")
+                continue
+
+            if float(obj['bndbox']['ymin']) > height or float(obj['bndbox']['ymin']) < 0:
+                print(f"bad ymin {obj['bndbox']['ymin']}")
+                continue
+
+            if float(obj['bndbox']['xmax']) > width or float(obj['bndbox']['xmax']) < 0:
+                print(f"bad xmax {obj['bndbox']['xmax']}")
+                continue
+
+            if float(obj['bndbox']['ymax']) > height or float(obj['bndbox']['ymax']) < 0:
+                print(f"bad ymax {obj['bndbox']['ymax']}")
+                continue
+
             
             difficult = bool(int(obj['difficult']))
             difficult_obj.append(int(difficult))
@@ -73,6 +96,10 @@ def build_example(annotation, class_map, images_dir):
                 views.append(obj['pose'].encode('utf8'))
             except:
                 pass
+
+    if len(classes) > 100:
+        print(f"too many classes ({len(classes)}) on {img_path}")
+        raise Exception(f"too many classes ({len(classes)}) on {img_path}")
 
     example = tf.train.Example(features=tf.train.Features(feature={
         'image/height': tf.train.Feature(int64_list=tf.train.Int64List(value=[height])),
@@ -122,8 +149,12 @@ def parse_set(class_map, out_file, annotations_dir, images_dir):
         annotation_xml = os.path.join(annotations_dir, annotation_file)
         annotation_xml = lxml.etree.fromstring(open(annotation_xml).read())
         annotation = parse_xml(annotation_xml)['annotation']
-        tf_example = build_example(annotation, class_map, images_dir)
-        writer.write(tf_example.SerializeToString())
+
+        try:
+            tf_example = build_example(annotation, class_map, images_dir)
+            writer.write(tf_example.SerializeToString())
+        except:
+            pass
 
     writer.close()
     logging.info(f"Wrote {out_file}")
