@@ -1,8 +1,7 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
-setup(name='yolov3_tf2',
+setup(name='train_persondet',
       version='0.1',
-      url='https://github.com/zzh8829/yolov3-tf2',
-      author='Zihao Zhang',
-      author_email='zzh8829@gmail.com',
-      packages=['yolov3_tf2'])
+      url='https://github.com/retail-intelligence/yolov3-tf2',
+      packages=find_packages(exclude='tests')
+)
