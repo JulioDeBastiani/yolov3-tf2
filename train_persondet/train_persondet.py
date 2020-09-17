@@ -153,6 +153,6 @@ def train_persondet(**kwargs):
         ]
 
         history = model.fit(train_dataset,
-                            epochs=kwargs[epochs],
+                            epochs=kwargs['epochs'],
                             callbacks=callbacks,
                             validation_data=val_dataset)
