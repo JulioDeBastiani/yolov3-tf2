@@ -21,57 +21,57 @@ def train_persondet(**kwargs):
     if len(physical_devices) > 0:
         tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
-    if kwargs[tiny]:
-        model = YoloV3Tiny(kwargs[size], training=True, classes=kwargs[num_classes])
+    if kwargs['tiny']:
+        model = YoloV3Tiny(kwargs['size'], training=True, classes=kwargs['num_classes'])
         anchors = yolo_tiny_anchors
         anchor_masks = yolo_tiny_anchor_masks
     else:
-        model = YoloV3(kwargs[size], training=True, classes=kwargs[num_classes])
+        model = YoloV3(kwargs['size'], training=True, classes=kwargs['num_classes'])
         anchors = yolo_anchors
         anchor_masks = yolo_anchor_masks
 
     train_dataset = dataset.load_fake_dataset()
-    if kwargs[dataset]:
-        train_dataset = dataset.load_tfrecord_dataset(kwargs[dataset], kwargs[classes], kwargs[size])
+    if kwargs['dataset']:
+        train_dataset = dataset.load_tfrecord_dataset(kwargs['dataset'], kwargs['classes'], kwargs['size'])
     train_dataset = train_dataset.shuffle(buffer_size=512)
-    train_dataset = train_dataset.batch(kwargs[batch_size])
+    train_dataset = train_dataset.batch(kwargs['batch_size'])
     train_dataset = train_dataset.map(lambda x, y: (
-        dataset.transform_images(x, kwargs[size]),
-        dataset.transform_targets(y, anchors, anchor_masks, kwargs[size])))
+        dataset.transform_images(x, kwargs['size']),
+        dataset.transform_targets(y, anchors, anchor_masks, kwargs['size'])))
     train_dataset = train_dataset.prefetch(
         buffer_size=tf.data.experimental.AUTOTUNE)
 
     val_dataset = dataset.load_fake_dataset()
-    if kwargs[val_dataset]:
+    if kwargs['val_dataset']:
         val_dataset = dataset.load_tfrecord_dataset(
-            kwargs[val_dataset], kwargs[classes], kwargs[size])
-    val_dataset = val_dataset.batch(kwargs[batch_size])
+            kwargs['val_dataset'], kwargs['classes'], kwargs['size'])
+    val_dataset = val_dataset.batch(kwargs['batch_size'])
     val_dataset = val_dataset.map(lambda x, y: (
-        dataset.transform_images(x, kwargs[size]),
-        dataset.transform_targets(y, anchors, anchor_masks, kwargs[size])))
+        dataset.transform_images(x, kwargs['size']),
+        dataset.transform_targets(y, anchors, anchor_masks, kwargs['size'])))
 
     # Configure the model for transfer learning
-    if kwargs[transfer] == 'none':
+    if kwargs['transfer'] == 'none':
         pass  # Nothing to do
-    elif kwargs[transfer] in ['darknet', 'no_output']:
+    elif kwargs['transfer'] in ['darknet', 'no_output']:
         # Darknet transfer is a special case that works
         # with incompatible number of classes
 
         # reset top layers
-        if kwargs[tiny]:
+        if kwargs['tiny']:
             model_pretrained = YoloV3Tiny(
-                kwargs[size], training=True, classes=kwargs[weights_num_classes] or kwargs[num_classes])
+                kwargs['size'], training=True, classes=kwargs['weights_num_classes'] or kwargs['num_classes'])
         else:
             model_pretrained = YoloV3(
-                kwargs[size], training=True, classes=kwargs[weights_num_classes] or kwargs[num_classes])
-        model_pretrained.load_weights(kwargs[weights])
+                kwargs['size'], training=True, classes=kwargs['weights_num_classes'] or kwargs['num_classes'])
+        model_pretrained.load_weights(kwargs['weights'])
 
-        if kwargs[transfer] == 'darknet':
+        if kwargs['transfer'] == 'darknet':
             model.get_layer('yolo_darknet').set_weights(
                 model_pretrained.get_layer('yolo_darknet').get_weights())
             freeze_all(model.get_layer('yolo_darknet'))
 
-        elif kwargs[transfer] == 'no_output':
+        elif kwargs['transfer'] == 'no_output':
             for l in model.layers:
                 if not l.name.startswith('yolo_output'):
                     l.set_weights(model_pretrained.get_layer(
@@ -80,26 +80,26 @@ def train_persondet(**kwargs):
 
     else:
         # All other transfer require matching classes
-        model.load_weights(kwargs[weights])
-        if kwargs[transfer] == 'fine_tune':
+        model.load_weights(kwargs['weights'])
+        if kwargs['transfer'] == 'fine_tune':
             # freeze darknet and fine tune other layers
             darknet = model.get_layer('yolo_darknet')
             freeze_all(darknet)
-        elif kwargs[transfer] == 'frozen':
+        elif kwargs['transfer'] == 'frozen':
             # freeze everything
             freeze_all(model)
 
-    optimizer = tf.keras.optimizers.Adam(lr=kwargs[learning_rate])
-    loss = [YoloLoss(anchors[mask], classes=kwargs[num_classes])
+    optimizer = tf.keras.optimizers.Adam(lr=kwargs['learning_rate'])
+    loss = [YoloLoss(anchors[mask], classes=kwargs['num_classes'])
             for mask in anchor_masks]
 
-    if kwargs[mode] == 'eager_tf':
+    if kwargs['mode'] == 'eager_tf':
         # Eager mode is great for debugging
         # Non eager graph mode is recommended for real training
         avg_loss = tf.keras.metrics.Mean('loss', dtype=tf.float32)
         avg_val_loss = tf.keras.metrics.Mean('val_loss', dtype=tf.float32)
 
-        for epoch in range(1, kwargs[epochs] + 1):
+        for epoch in range(1, kwargs['epochs'] + 1):
             for batch, (images, labels) in enumerate(train_dataset):
                 with tf.GradientTape() as tape:
                     outputs = model(images, training=True)
@@ -142,7 +142,7 @@ def train_persondet(**kwargs):
                 'checkpoints/yolov3_train_{}.tf'.format(epoch))
     else:
         model.compile(optimizer=optimizer, loss=loss,
-                      run_eagerly=(kwargs[mode] == 'eager_fit'))
+                      run_eagerly=(kwargs['mode'] == 'eager_fit'))
 
         callbacks = [
             ReduceLROnPlateau(verbose=1),
@@ -153,6 +153,6 @@ def train_persondet(**kwargs):
         ]
 
         history = model.fit(train_dataset,
-                            epochs=kwargs[epochs],
+                            epochs=kwargs['epochs'],
                             callbacks=callbacks,
                             validation_data=val_dataset)
