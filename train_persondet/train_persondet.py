@@ -64,7 +64,7 @@ def train_persondet(**kwargs):
         else:
             model_pretrained = YoloV3(
                 kwargs[size], training=True, classes=kwargs[weights_num_classes] or kwargs[num_classes])
-        model_pretrained.load_weights(kwargs[weights)
+        model_pretrained.load_weights(kwargs[weights])
 
         if kwargs[transfer] == 'darknet':
             model.get_layer('yolo_darknet').set_weights(
