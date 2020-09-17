@@ -13,7 +13,7 @@ from yolov3_tf2.models import (
     yolo_tiny_anchors, yolo_tiny_anchor_masks
 )
 from yolov3_tf2.utils import freeze_all
-import yolov3_tf2.dataset as dataset
+import train_persondet.train_dataset as dataset
 
 
 def train_persondet(**kwargs):
@@ -30,7 +30,7 @@ def train_persondet(**kwargs):
         anchors = yolo_anchors
         anchor_masks = yolo_anchor_masks
 
-    train_dataset = dataset.load_fake_dataset()
+    train_dataset = dataset.load_fake_dataset(kwargs['fake_dataset'])
     if kwargs['dataset']:
         train_dataset = dataset.load_tfrecord_dataset(kwargs['dataset'], kwargs['classes'], kwargs['size'])
     train_dataset = train_dataset.shuffle(buffer_size=512)
@@ -41,7 +41,7 @@ def train_persondet(**kwargs):
     train_dataset = train_dataset.prefetch(
         buffer_size=tf.data.experimental.AUTOTUNE)
 
-    val_dataset = dataset.load_fake_dataset()
+    val_dataset = dataset.load_fake_dataset(kwargs['fake_dataset'])
     if kwargs['val_dataset']:
         val_dataset = dataset.load_tfrecord_dataset(
             kwargs['val_dataset'], kwargs['classes'], kwargs['size'])
@@ -153,6 +153,6 @@ def train_persondet(**kwargs):
         ]
 
         history = model.fit(train_dataset,
-                            epochs=kwargs['epochs'],
+                            epochs=kwargs[epochs],
                             callbacks=callbacks,
                             validation_data=val_dataset)
