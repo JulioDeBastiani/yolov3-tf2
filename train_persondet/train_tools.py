@@ -10,9 +10,6 @@ import tqdm
 
 from PIL import Image
 
-flags.DEFINE_string('output_train_file', './data/set_03_train.tfrecord', 'outpot dataset')
-flags.DEFINE_string('output_val_file', './data/set_03_val.tfrecord', 'outpot dataset')
-
 
 def build_example(annotation, class_map, images_dir):
     img_path = os.path.join(images_dir, annotation['filename'].replace('set_01', '').replace(".xml", ".jpg"))
