@@ -10,14 +10,6 @@ import tqdm
 
 from PIL import Image
 
-flags.DEFINE_string('train_labels_dir', '/run/media/juju/backup_loja/set_03/train_label',
-                    'path to raw PASCAL VOC dataset')
-flags.DEFINE_string('val_labels_dir', '/home/rubens/Documents/annotations/person/val_label',
-                    'path to raw PASCAL VOC dataset')
-flags.DEFINE_string('train_data_dir', '/run/media/juju/backup_loja/set_03/train_data',
-                    'path to the train images')
-flags.DEFINE_string('val_data_dir', '/home/rubens/Documents/annotations/person/val',
-                    'path to the validation images')
 flags.DEFINE_string('output_train_file', './data/set_03_train.tfrecord', 'outpot dataset')
 flags.DEFINE_string('output_val_file', './data/set_03_val.tfrecord', 'outpot dataset')
 flags.DEFINE_string('classes', './data/set_00.names', 'classes file')
@@ -159,7 +151,7 @@ def parse_set(class_map, out_file, annotations_dir, images_dir):
     writer.close()
     logging.info(f"Wrote {out_file}")
 
-def main(**kwargs):
+def pre_train(**kwargs):
     class_map = {name: idx for idx, name in enumerate(
         open(kwargs['classes']).read().splitlines())}
     logging.info("Class mapping loaded: %s", class_map)
