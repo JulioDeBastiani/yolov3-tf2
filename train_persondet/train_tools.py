@@ -8,15 +8,42 @@ import tensorflow as tf
 import lxml.etree
 import tqdm
 
+from PIL import Image
 
-def build_example(annotation, class_map, data_dir):
-    img_path = os.path.join(
-        data_dir, 'JPEGImages', annotation['filename'])
+flags.DEFINE_string('train_labels_dir', '/run/media/juju/backup_loja/set_03/train_label',
+                    'path to raw PASCAL VOC dataset')
+flags.DEFINE_string('val_labels_dir', '/home/rubens/Documents/annotations/person/val_label',
+                    'path to raw PASCAL VOC dataset')
+flags.DEFINE_string('train_data_dir', '/run/media/juju/backup_loja/set_03/train_data',
+                    'path to the train images')
+flags.DEFINE_string('val_data_dir', '/home/rubens/Documents/annotations/person/val',
+                    'path to the validation images')
+flags.DEFINE_string('output_train_file', './data/set_03_train.tfrecord', 'outpot dataset')
+flags.DEFINE_string('output_val_file', './data/set_03_val.tfrecord', 'outpot dataset')
+flags.DEFINE_string('classes', './data/set_00.names', 'classes file')
+
+
+def build_example(annotation, class_map, images_dir):
+    img_path = os.path.join(images_dir, annotation['filename'].replace('set_01', '').replace(".xml", ".jpg"))
+    # print("images_dir: " + images_dir)
+    # print("annotation['filename']: " + annotation['filename'])
     img_raw = open(img_path, 'rb').read()
     key = hashlib.sha256(img_raw).hexdigest()
 
-    width = int(annotation['size']['width'])
-    height = int(annotation['size']['height'])
+    if img_raw[0] != 255 and img_raw[0] != 137:
+        print(f"raw {img_raw[0]}")
+        print(f"bad image {img_path}")
+        raise Exception("bad image")
+
+    try:
+        width = int(annotation['size']['width'])
+        height = int(annotation['size']['height'])
+    except KeyError:
+        im = Image.open(img_path)
+        width, height = im.size
+
+    width = width if width > 0 else 416
+    height = height if height > 0 else 416
 
     xmin = []
     ymin = []
@@ -29,6 +56,27 @@ def build_example(annotation, class_map, data_dir):
     difficult_obj = []
     if 'object' in annotation:
         for obj in annotation['object']:
+            if not obj['name'] in class_map:
+                print(f"weird name {obj['name']}")
+                continue
+
+            if float(obj['bndbox']['xmin']) > width or float(obj['bndbox']['xmin']) < 0:
+                print(f"bad xmin {obj['bndbox']['xmin']}")
+                continue
+
+            if float(obj['bndbox']['ymin']) > height or float(obj['bndbox']['ymin']) < 0:
+                print(f"bad ymin {obj['bndbox']['ymin']}")
+                continue
+
+            if float(obj['bndbox']['xmax']) > width or float(obj['bndbox']['xmax']) < 0:
+                print(f"bad xmax {obj['bndbox']['xmax']}")
+                continue
+
+            if float(obj['bndbox']['ymax']) > height or float(obj['bndbox']['ymax']) < 0:
+                print(f"bad ymax {obj['bndbox']['ymax']}")
+                continue
+
+            
             difficult = bool(int(obj['difficult']))
             difficult_obj.append(int(difficult))
 
@@ -38,8 +86,20 @@ def build_example(annotation, class_map, data_dir):
             ymax.append(float(obj['bndbox']['ymax']) / height)
             classes_text.append(obj['name'].encode('utf8'))
             classes.append(class_map[obj['name']])
-            truncated.append(int(obj['truncated']))
-            views.append(obj['pose'].encode('utf8'))
+
+            try:
+                truncated.append(int(obj['truncated']))
+            except:
+                pass
+
+            try:
+                views.append(obj['pose'].encode('utf8'))
+            except:
+                pass
+
+    if len(classes) > 100:
+        print(f"too many classes ({len(classes)}) on {img_path}")
+        raise Exception(f"too many classes ({len(classes)}) on {img_path}")
 
     example = tf.train.Example(features=tf.train.Features(feature={
         'image/height': tf.train.Feature(int64_list=tf.train.Int64List(value=[height])),
@@ -78,23 +138,50 @@ def parse_xml(xml):
             result[child.tag].append(child_result[child.tag])
     return {xml.tag: result}
 
+def parse_set(class_map, out_file, annotations_dir, images_dir):
+    writer = tf.io.TFRecordWriter(out_file)
 
-def pre_train(**kwargs):
+    for annotation_file in tqdm.tqdm(os.listdir(annotations_dir)):
+        if not annotation_file.endswith('.xml'):
+            continue
+
+        # print("file: " + annotation_file)
+        annotation_xml = os.path.join(annotations_dir, annotation_file)
+        annotation_xml = lxml.etree.fromstring(open(annotation_xml).read())
+        annotation = parse_xml(annotation_xml)['annotation']
+
+        try:
+            tf_example = build_example(annotation, class_map, images_dir)
+            writer.write(tf_example.SerializeToString())
+        except:
+            pass
+
+    writer.close()
+    logging.info(f"Wrote {out_file}")
+
+def main(**kwargs):
     class_map = {name: idx for idx, name in enumerate(
         open(kwargs['classes']).read().splitlines())}
     logging.info("Class mapping loaded: %s", class_map)
 
-    writer = tf.io.TFRecordWriter(kwargs['output_file'])
-    image_list = open(os.path.join(
-        kwargs['data_dir'], 'ImageSets', 'Main', 'aeroplane_%s.txt' % kwargs['split'])).read().splitlines()
-    logging.info("Image list loaded: %d", len(image_list))
-    for image in tqdm.tqdm(image_list):
-        name, _ = image.split()
-        annotation_xml = os.path.join(
-            kwargs['data_dir'], 'Annotations', name + '.xml')
-        annotation_xml = lxml.etree.fromstring(open(annotation_xml).read())
-        annotation = parse_xml(annotation_xml)['annotation']
-        tf_example = build_example(annotation, class_map, kwargs['data_dir'])
-        writer.write(tf_example.SerializeToString())
-    writer.close()
+    parse_set(class_map, kwargs['output_train_file'], kwargs['train_labels_dir'], kwargs['train_data_dir'])
+    parse_set(class_map, kwargs['output_val_file'], kwargs['val_labels_dir'], kwargs['val_data_dir'])
+
+    # writer = tf.io.TFRecordWriter(FLAGS.output_file)
+    # image_list = open(os.path.join(
+    #     FLAGS.data_dir, 'ImageSets', 'Main', 'aeroplane_%s.txt' % FLAGS.split)).read().splitlines()
+    # logging.info("Image list loaded: %d", len(image_list))
+    # for image in tqdm.tqdm(image_list):
+    #     name, _ = image.split()
+    #     annotation_xml = os.path.join(
+    #         FLAGS.data_dir, 'Annotations', name + '.xml')
+    #     annotation_xml = lxml.etree.fromstring(open(annotation_xml).read())
+    #     annotation = parse_xml(annotation_xml)['annotation']
+    #     tf_example = build_example(annotation, class_map)
+    #     writer.write(tf_example.SerializeToString())
+    # writer.close()
     logging.info("Done")
+
+
+if __name__ == '__main__':
+    app.run(main)
