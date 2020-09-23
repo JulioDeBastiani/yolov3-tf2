@@ -20,7 +20,8 @@ def unfreeze_models(**kwargs):
         yolo = YoloV3Tiny(classes=kwargs['num_classes'])
     else:
         yolo = YoloV3(classes=kwargs['num_classes'])
-
+    print()
+    print()
     yolo.load_weights(kwargs['weights'])
     logging.info('weights loaded')
 
