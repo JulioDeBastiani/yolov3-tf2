@@ -1,4 +1,5 @@
 import time
+import os
 from absl import app, flags, logging
 from absl.flags import FLAGS
 import cv2
@@ -30,10 +31,10 @@ def unfreeze_models(**kwargs):
     infer = model.signatures[tf.saved_model.DEFAULT_SERVING_SIGNATURE_DEF_KEY]
     logging.info(infer.structured_outputs)
 
-    class_names = [c.strip() for c in open(kwargs['classes']).readlines()]
+    class_names = [c.strip() for c in open(os.path.join(os.getcwd(), kwargs['classes'])).readlines()]
     logging.info('classes loaded')
 
-    img = tf.image.decode_image(open(kwargs['image'], 'rb').read(), channels=3)
+    img = tf.image.decode_image(open(os.path.join(os.getcwd(), kwargs['image']), 'rb').read(), channels=3)
     img = tf.expand_dims(img, 0)
     img = transform_images(img, 416)
 
