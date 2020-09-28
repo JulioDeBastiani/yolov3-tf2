@@ -1,6 +1,7 @@
 import tensorflow as tf
 from absl.flags import FLAGS
 
+
 @tf.function
 def transform_targets_for_output(y_true, grid_size, anchor_idxs):
     # y_true: (N, boxes, (x1, y1, x2, y2, class, best_anchor))
