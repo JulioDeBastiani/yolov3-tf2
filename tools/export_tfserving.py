@@ -27,9 +27,7 @@ def main(_argv):
         yolo = YoloV3Tiny(classes=FLAGS.num_classes)
     else:
         yolo = YoloV3(classes=FLAGS.num_classes)
-    print(FLAGS.classes)
-    print()
-    print()
+
     yolo.load_weights(FLAGS.weights)
     logging.info('weights loaded')
 
