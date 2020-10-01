@@ -1,5 +1,4 @@
-from absl import flags
-from absl.flags import FLAGS
+from absl import app, flags, logging
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import Model
