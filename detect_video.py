@@ -9,6 +9,7 @@ from yolov3_tf2.models import (
 from yolov3_tf2.dataset import transform_images
 from yolov3_tf2.utils import draw_outputs
 
+import numpy as np
 
 flags.DEFINE_string('classes', './data/coco.names', 'path to classes file')
 flags.DEFINE_string('weights', './checkpoints/yolov3.tf',
@@ -20,6 +21,8 @@ flags.DEFINE_string('video', './data/video.mp4',
 flags.DEFINE_string('output', None, 'path to output video')
 flags.DEFINE_string('output_format', 'XVID', 'codec used in VideoWriter when saving video to file')
 flags.DEFINE_integer('num_classes', 80, 'number of classes in the model')
+flags.DEFINE_string('output_detections', './data/detections.txt',
+                    'file to output the detections to')
 
 
 def main(_argv):
@@ -55,6 +58,13 @@ def main(_argv):
         codec = cv2.VideoWriter_fourcc(*FLAGS.output_format)
         out = cv2.VideoWriter(FLAGS.output, codec, fps, (width, height))
 
+    frame = 0
+    detections_file = None
+
+    if FLAGS.output_detections:
+        detections_file = open(FLAGS.output_detections, 'w')
+        detections_file.write('frame;x1;y1;x2;y2;score;\n')
+
     while True:
         _, img = vid.read()
 
@@ -73,6 +83,16 @@ def main(_argv):
         times.append(t2-t1)
         times = times[-20:]
 
+        if FLAGS.output_detections:
+            wh = np.flip(img.shape[0:2])
+
+            for i in range(nums[0]):
+                x1, y1 = tuple((np.array(boxes[0][i][0:2]) * wh).astype(np.int32))
+                x2, y2 = tuple((np.array(boxes[0][i][2:4]) * wh).astype(np.int32))
+                detections_file.write(f"{frame};{x1};{y1};{x2};{y2};{scores[0][i]}\n")
+
+        frame += 1
+
         img = draw_outputs(img, (boxes, scores, classes, nums), class_names)
         img = cv2.putText(img, "Time: {:.2f}ms".format(sum(times)/len(times)*1000), (0, 30),
                           cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (0, 0, 255), 2)
@@ -84,6 +104,8 @@ def main(_argv):
 
     cv2.destroyAllWindows()
 
+    if detections_file:
+        detections_file.close()
 
 if __name__ == '__main__':
     try:
