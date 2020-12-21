@@ -1,7 +1,7 @@
 # Records
 
 ## About
-Here we store a list of the times that took for training an epoch of the yolo model. In each table we shall store.
+Here we store the tables of the time that took for training an epoch of the yolo model. In each table we store:
 
 - O.S. : The operating system.
 
@@ -11,7 +11,7 @@ Here we store a list of the times that took for training an epoch of the yolo mo
 
 - Val dataset size.
 
-- Time: in minutes, used the average time between 2 finished epochs from the finishing of the last one till the finish of the current.
+- Time: used the average time between 2 finished epochs from the finishing of the last one till the finish of the current.
 
 ## PERSONDET
 
