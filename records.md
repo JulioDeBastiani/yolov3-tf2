@@ -25,15 +25,15 @@ Here we store the tables of the time that took for training an epoch of the yolo
 
 ## PERSONDET
 
-| O.S. | Batch size | Train dataset size | Val dataset size | AVR | Memory speed | GPU memory | GPU frequency | GPU | Time | 
-| ------------ | ----------------------| ------------------ | ------ | ---------------- | ---- | ------ | ------ |---------------- | ---- |
-| Ubuntu 18.04.5 LTS| 20 | 49943 | 10702 | 539,3 MB/s | 3000 MT/s | 6GB (5931MB) | 300,405 MHz | GeForce RTX 2060 | 21 min 22.5 sec |
+| O.S. | Batch size | Train dataset size | Val dataset size | AVR | Memory speed | GPU |  GPU memory | GPU frequency | Time | 
+| ------------ | ----------------------| ------------------ | ------ | ---------------- | ---- | ---------------- | ------ | ------ | ---- |
+| Ubuntu 18.04.5 LTS| 20 | 49943 | 10702 | 539,3 MB/s | 3000 MT/s | GeForce RTX 2060 | 6GB (5931MB) | 300,405 MHz | 21 min 22.5 sec |
 
 ## TINY-PERSONDET
 
-| O.S. | Batch size | Train dataset size | Val dataset size | AVR | Memory speed | GPU memory | GPU frequency | GPU | Time | 
-| ------------ | ----------------------| ------------------ | ------ | ---------------- | ---- | ------ | ------ |---------------- | ---- |
-| Ubuntu 18.04.5 LTS| 20 | 49943 | 10702 | 539,3 MB/s | 3000 MT/s | 6GB (5931MB) | 300,405 MHz | GeForce RTX 2060 | 11 min 50.5 sec |
+| O.S. | Batch size | Train dataset size | Val dataset size | AVR | Memory speed | GPU |  GPU memory | GPU frequency | Time | 
+| ------------ | ----------------------| ------------------ | ------ | ---------------- | ---- | ---------------- | ------ | ------ | ---- |
+| Ubuntu 18.04.5 LTS| 20 | 49943 | 10702 | 539,3 MB/s | 3000 MT/s | GeForce RTX 2060 | 6GB (5931MB) | 300,405 MHz | 11 min 50.5 sec |
 
 ## FACEDET
 
