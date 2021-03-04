@@ -116,7 +116,7 @@ Alternatively ou can also use the bash based train scripts, to use them you have
 - Modify the variables in the bash files `train-faces` or `train-person`:
   - WEIGHT
   - WEIGHTS_TINY
-  - FACE_SET=FaceDetection
+  - FACE_SET
   - FACE_SET_FOLDER
   - CHECKPOINTS_FOLDER
   - EPOCHS
