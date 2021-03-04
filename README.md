@@ -109,6 +109,23 @@ python train.py --batch_size 8 --dataset ~/Data/voc2012.tfrecord --val_dataset ~
 python train.py --batch_size 8 --dataset ~/Data/voc2012.tfrecord --val_dataset ~/Data/voc2012_val.tfrecord --epochs 10 --mode eager_fit --transfer fine_tune --weights ./checkpoints/yolov3-tiny.tf --tiny
 ```
 
+Alternatively ou can also use the bash based train scripts, to use them you have to:
+
+- Make sure tou have the `yolov3-tf2-gpu` conda environment already installed.
+
+- Modify the variables in the bash files `train-faces` or `train-person`:
+  - WEIGHT
+  - WEIGHTS_TINY
+  - FACE_SET=FaceDetection
+  - FACE_SET_FOLDER
+  - CHECKPOINTS_FOLDER
+  - EPOCHS
+  - BATCH_SIZE
+  - PERSON_SET (train-person only)
+  - PERSON_SET_FOLDER (train-person only)
+
+- Then use `bash train-faces` or `bash train-person` to train faces_model or person_model respectively.
+
 ### Tensorflow Serving
 You can export the model to tf serving
 ```
@@ -265,52 +282,62 @@ Training definitely won't work if the rendered label doesn't look correct
 
 ```bash
 convert.py:
+  --num_classes: number of classes in the model
+    (default: '80')
+    (an integer)
   --output: path to output
     (default: './checkpoints/yolov3.tf')
   --[no]tiny: yolov3 or yolov3-tiny
     (default: 'false')
   --weights: path to weights file
     (default: './data/yolov3.weights')
-  --num_classes: number of classes in the model
-    (default: '80')
-    (an integer)
 
 detect.py:
   --classes: path to classes file
     (default: './data/coco.names')
   --image: path to input image
     (default: './data/girl.png')
+  --num_classes: number of classes in the model
+    (default: '80')
+    (an integer)
   --output: path to output image
     (default: './output.jpg')
+  --size: resize images to
+    (default: '416')
+    (an integer)
+  --tfrecord: tfrecord instead of image
   --[no]tiny: yolov3 or yolov3-tiny
     (default: 'false')
   --weights: path to weights file
     (default: './checkpoints/yolov3.tf')
-  --num_classes: number of classes in the model
-    (default: '80')
-    (an integer)
 
 detect_video.py:
   --classes: path to classes file
     (default: './data/coco.names')
-  --video: path to input video (use 0 for cam)
-    (default: './data/video.mp4')
-  --output: path to output video (remember to set right codec for given format. e.g. XVID for .avi)
-    (default: None)
-  --output_format: codec used in VideoWriter when saving video to file
-    (default: 'XVID)
-  --[no]tiny: yolov3 or yolov3-tiny
-    (default: 'false')
-  --weights: path to weights file
-    (default: './checkpoints/yolov3.tf')
   --num_classes: number of classes in the model
     (default: '80')
     (an integer)
+  --output: path to output video
+  --output_detections: file to output the detections to
+    (default: './data/detections.txt')
+  --output_format: codec used in VideoWriter when saving video to file
+    (default: 'XVID')
+  --size: resize images to
+    (default: '416')
+    (an integer)
+  --[no]tiny: yolov3 or yolov3-tiny
+    (default: 'false')
+  --video: path to video file or number for webcam)
+    (default: './data/video.mp4')
+  --weights: path to weights file
+    (default: './checkpoints/yolov3.tf')
 
 train.py:
   --batch_size: batch size
     (default: '8')
     (an integer)
+  --checkpoints: folder to save the checkpoints to
+    (default: '/run/media/juju/backup_loja/checkpoints/regular/train')
   --classes: path to classes file
     (default: './data/coco.names')
   --dataset: path to dataset
@@ -331,13 +358,16 @@ train.py:
     (an integer)
   --[no]tiny: yolov3 or yolov3-tiny
     (default: 'false')
-  --transfer: <none|darknet|no_output|frozen|fine_tune>: none: Training from scratch, darknet: Transfer darknet, no_output: Transfer all but output, frozen: Transfer and freeze all,
-    fine_tune: Transfer all and freeze darknet only
+  --transfer: <none|darknet|no_output|frozen|fine_tune>: none: Training from scratch, darknet: Transfer darknet, no_output:
+    Transfer all but output, frozen: Transfer and freeze all, fine_tune: Transfer all and freeze darknet only
     (default: 'none')
   --val_dataset: path to validation dataset
     (default: '')
   --weights: path to weights file
     (default: './checkpoints/yolov3.tf')
+  --weights_num_classes: specify num class for `weights` file if different, useful in transfer learning with different number
+    of classes
+    (an integer)
 ```
 
 ## Change Log
