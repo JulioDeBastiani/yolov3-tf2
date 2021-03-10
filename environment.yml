@@ -1,4 +1,4 @@
-name: yolov3-tf2-gpu
+name: yolov3
 
 dependencies:
   - python==3.7
@@ -8,7 +8,5 @@ dependencies:
   - cudnn
   - cudatoolkit==10.1.243
   - pip:
-    - tensorflow-gpu==2.1.0rc1
-    - lxml
-    - tqdm
+    - -r requirements.txt
     - -e .

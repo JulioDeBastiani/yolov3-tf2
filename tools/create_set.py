@@ -7,16 +7,35 @@ import csv
 import shutil
 import xml.etree.ElementTree as ET
 
-import config.create_set_config as config
+import FLAGS.create_set_FLAGS as FLAGS
 
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string('set_name', None, 'Name of the new set')
 flags.DEFINE_string(
-    'previous_dataset', None, 'Path to Frozen dataset'
+    'frozen_dataset', None, 'Path to Frozen dataset'
+)
+flags.DEFINE_string(
+    'base_set_path', None, 'Path to the dataset'
+)
+flags.DEFINE_string(
+    'frozen_set_name', None, 'Path to the frozen dataset'
+)
+flags.DEFINE_string(
+    'set_output_folder', None, 'Path to the dataset output'
 )
 
-flags.mark_flag_as_required("set_name")
+flags.DEFINE_float(
+    'set_dev_percentage', .15, 'Path to Frozen dataset'
+)
+flags.DEFINE_float(
+    'set_train_percentage', .7, 'Path to Frozen dataset'
+)
+flags.DEFINE_float(
+    'set_val_percentage', .15, 'Path to Frozen dataset'
+)
+
+flags.mark_flag_as_required(['set_name', 'base_set_path'])
 
 
 def main(argv) -> None:
@@ -24,13 +43,13 @@ def main(argv) -> None:
 
     set_files: list = []
 
-    if not os.path.exists(os.path.join(config.set_output_folder, FLAGS.set_name)):
+    if not os.path.exists(os.path.join(FLAGS.set_output_folder, FLAGS.set_name)):
         create_set_folders()
 
-    if not os.path.exists(str(FLAGS.previous_dataset)):
+    if not os.path.exists(str(FLAGS.frozen_dataset)):
         create_empty_dataset()
 
-    for _, _, files in os.walk(config.base_set_path, topdown=False):
+    for _, _, files in os.walk(FLAGS.base_set_path, topdown=False):
         for file in files:
             if file.split('.')[1] == 'xml':
                 set_files.append(file)
@@ -38,18 +57,18 @@ def main(argv) -> None:
     persondet_dict: DefaultDict[str, str] = assign_set_to_persondet(set_files)
 
     for key in persondet_dict.keys():
-        if os.path.exists(f'{config.base_set_path}/{key}') and os.path.exists(
-            f'{config.base_set_path}/{key.split(".")[0]}.jpg'
+        if os.path.exists(f'{FLAGS.base_set_path}/{key}') and os.path.exists(
+            f'{FLAGS.base_set_path}/{key.split(".")[0]}.jpg'
         ):
 
             shutil.copy2(
-                f'{config.base_set_path}/{key}',
-                f'{config.set_output_folder}/{FLAGS.set_name}/{persondet_dict[key]}_label/{key}'
+                f'{FLAGS.base_set_path}/{key}',
+                f'{FLAGS.set_output_folder}/{FLAGS.set_name}/{persondet_dict[key]}_label/{key}'
             )
 
             shutil.copy2(
-                f'{config.base_set_path}/{key.split(".")[0]}.jpg',
-                f'{config.set_output_folder}/{FLAGS.set_name}/{persondet_dict[key]}_data/{key.split(".")[0]}.jpg'
+                f'{FLAGS.base_set_path}/{key.split(".")[0]}.jpg',
+                f'{FLAGS.set_output_folder}/{FLAGS.set_name}/{persondet_dict[key]}_data/{key.split(".")[0]}.jpg'
             )
 
     correct_xml_tree(persondet_dict)
@@ -57,13 +76,13 @@ def main(argv) -> None:
 
 def create_empty_dataset() -> None:
 
-    FLAGS.previous_dataset = os.path.join(
-        config.set_output_folder,
+    FLAGS.frozen_dataset = os.path.join(
+        FLAGS.set_output_folder,
         FLAGS.set_name,
-        config.frozen_set_name
+        FLAGS.frozen_set_name
     )
 
-    with open(FLAGS.previous_dataset, 'w') as csv_file:
+    with open(FLAGS.frozen_dataset, 'w') as csv_file:
         csv_writer = csv.writer(csv_file, delimiter=',')
 
         csv_writer.writerow(('persondet', 'set'))
@@ -73,7 +92,7 @@ def assign_set_to_persondet(persondet_path_list: list) -> dict:
     """Assign a set to each persondet path that doesn't have one.
 
     Compare the percentage of sets on the csv and assign the
-    ones that weren't in the previous_dataset to a set according to the config
+    ones that weren't in the frozen_dataset to a set according to the FLAGS
     defined percentage.
 
     Parameters
@@ -105,9 +124,9 @@ def assign_set_to_persondet(persondet_path_list: list) -> dict:
 
     to_be_added: int = total_ids - subtotal_ids
 
-    val_total: int = round(total_ids * config.set_val_percentage)
-    dev_total: int = round(total_ids * config.set_dev_percentage)
-    train_total: int = round(total_ids * config.set_train_percentage)
+    val_total: int = round(total_ids * FLAGS.set_val_percentage)
+    dev_total: int = round(total_ids * FLAGS.set_dev_percentage)
+    train_total: int = round(total_ids * FLAGS.set_train_percentage)
 
     val_total -= subtotal_val
     dev_total -= subtotal_dev
@@ -118,14 +137,14 @@ def assign_set_to_persondet(persondet_path_list: list) -> dict:
     random.shuffle(new_persondets)
 
     if not os.path.exists(os.path.join(
-        config.set_output_folder,
+        FLAGS.set_output_folder,
         FLAGS.set_name,
-        config.frozen_set_name
+        FLAGS.frozen_set_name
     )):
 
         shutil.copy2(
-            FLAGS.previous_dataset,
-            os.path.join(config.set_output_folder, FLAGS.set_name, config.frozen_set_name)
+            FLAGS.frozen_dataset,
+            os.path.join(FLAGS.set_output_folder, FLAGS.set_name, FLAGS.frozen_set_name)
         )
 
     add_to_dict_selected_persondet(new_persondets, csv_dict, 'dev_set', dev_total)
@@ -163,7 +182,7 @@ def add_to_dict_selected_persondet(
     del new_persondets[:ids_to_get]
 
     with open(
-        os.path.join(config.set_output_folder, FLAGS.set_name, config.frozen_set_name),
+        os.path.join(FLAGS.set_output_folder, FLAGS.set_name, FLAGS.frozen_set_name),
         'a'
     ) as csv_file:
         csv_writer = csv.writer(csv_file, delimiter=',')
@@ -179,7 +198,7 @@ def get_csv_data(csv_data: dict) -> (int, int, int, list):
     """Get data from the frozen set csv.
 
     Compare the percentage of sets on the csv and assign the
-    ones that weren't in the previous_dataset to a set according to the config
+    ones that weren't in the frozen_dataset to a set according to the FLAGS
     defined percentage.
 
     Parameters
@@ -205,7 +224,7 @@ def get_csv_data(csv_data: dict) -> (int, int, int, list):
     subtotal_dev: int = 0
     subtotal_train: int = 0
 
-    with open(FLAGS.previous_dataset, 'r') as csv_file:
+    with open(FLAGS.frozen_dataset, 'r') as csv_file:
         csv_reader = csv.reader(csv_file, delimiter=',')
         next(csv_reader)
         for row in csv_reader:
@@ -240,13 +259,13 @@ def create_set_folders() -> None:
     """
 
     try:
-        os.mkdir(os.path.join(config.set_output_folder, FLAGS.set_name))
-        os.mkdir(os.path.join(config.set_output_folder, FLAGS.set_name, 'val_set_data'))
-        os.mkdir(os.path.join(config.set_output_folder, FLAGS.set_name, 'val_set_label'))
-        os.mkdir(os.path.join(config.set_output_folder, FLAGS.set_name, 'train_set_data'))
-        os.mkdir(os.path.join(config.set_output_folder, FLAGS.set_name, 'train_set_label'))
-        os.mkdir(os.path.join(config.set_output_folder, FLAGS.set_name, 'dev_set_label'))
-        os.mkdir(os.path.join(config.set_output_folder, FLAGS.set_name, 'dev_set_data'))
+        os.mkdir(os.path.join(FLAGS.set_output_folder, FLAGS.set_name))
+        os.mkdir(os.path.join(FLAGS.set_output_folder, FLAGS.set_name, 'val_set_data'))
+        os.mkdir(os.path.join(FLAGS.set_output_folder, FLAGS.set_name, 'val_set_label'))
+        os.mkdir(os.path.join(FLAGS.set_output_folder, FLAGS.set_name, 'train_set_data'))
+        os.mkdir(os.path.join(FLAGS.set_output_folder, FLAGS.set_name, 'train_set_label'))
+        os.mkdir(os.path.join(FLAGS.set_output_folder, FLAGS.set_name, 'dev_set_label'))
+        os.mkdir(os.path.join(FLAGS.set_output_folder, FLAGS.set_name, 'dev_set_data'))
     except Exception:
         logging.log(logging.FATAL, 'Could not create folders')
 
@@ -255,12 +274,12 @@ def correct_xml_tree(persondet_dict):
 
     persondet_paths = persondet_dict.keys()
     for persondet_path in persondet_paths:
-        full_path = f'{config.set_output_folder}/{FLAGS.set_name}/{persondet_dict[persondet_path]}_label/{persondet_path}'
+        full_path = f'{FLAGS.set_output_folder}/{FLAGS.set_name}/{persondet_dict[persondet_path]}_label/{persondet_path}'
         tree = ET.parse(full_path)
         root = tree.getroot()
 
         for path in root.findall('path'):
-            path.text = f'{config.set_xml_path}{FLAGS.set_name}/{persondet_dict[persondet_path]}_data/'
+            path.text = f'{FLAGS.set_output_folder}{FLAGS.set_name}/{persondet_dict[persondet_path]}_data/'
 
         for filename in root.findall('filename'):
             filename.text = f'{persondet_path.split(".")[0]}.jpg'
