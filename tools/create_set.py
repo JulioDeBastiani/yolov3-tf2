@@ -6,10 +6,7 @@ import sys
 import csv
 import shutil
 import xml.etree.ElementTree as ET
-
-import FLAGS.create_set_FLAGS as FLAGS
-
-FLAGS = flags.FLAGS
+from absl.flags import FLAGS
 
 flags.DEFINE_string('set_name', None, 'Name of the new set')
 flags.DEFINE_string(
@@ -19,30 +16,38 @@ flags.DEFINE_string(
     'base_set_path', None, 'Path to the dataset'
 )
 flags.DEFINE_string(
-    'frozen_set_name', None, 'Path to the frozen dataset'
+    'frozen_set_name', 'frozen_set.csv', 'Path to the frozen dataset'
 )
 flags.DEFINE_string(
     'set_output_folder', None, 'Path to the dataset output'
 )
 
 flags.DEFINE_float(
-    'set_dev_percentage', .15, 'Path to Frozen dataset'
+    'set_dev_percentage', .15, 'Percentage of dev created from dataset.'
 )
 flags.DEFINE_float(
-    'set_train_percentage', .7, 'Path to Frozen dataset'
+    'set_train_percentage', .7, 'Percentage of train created from dataset.'
 )
 flags.DEFINE_float(
-    'set_val_percentage', .15, 'Path to Frozen dataset'
+    'set_val_percentage', .15, 'Percentage of validation created from dataset.'
 )
 
-flags.mark_flag_as_required(['set_name', 'base_set_path'])
+flags.mark_flags_as_required(['set_name', 'base_set_path'])
 
 
 def main(argv) -> None:
+
     del argv
 
-    set_files: list = []
+    if FLAGS.set_dev_percentage + FLAGS.set_train_percentage + FLAGS.set_val_percentage != 1:
+        logging.error(
+            'The datasets percentages does\'t add up, they must sum 1 and now they sum '
+            f'{FLAGS.set_dev_percentage + FLAGS.set_train_percentage + FLAGS.set_val_percentage}.\n'
+            'Exiting...'
+        )
+        sys.exit(1)
 
+    set_files: list = []
     if not os.path.exists(os.path.join(FLAGS.set_output_folder, FLAGS.set_name)):
         create_set_folders()
 
