@@ -8,7 +8,7 @@ import shutil
 import xml.etree.ElementTree as ET
 from absl.flags import FLAGS
 
-from yolov3_tf2.io_utils import get_directory_xml_files
+from yolov3_tf2.dataset import get_directory_xml_files
 
 flags.DEFINE_string('set_name', None, 'Name of the new set')
 flags.DEFINE_string(
