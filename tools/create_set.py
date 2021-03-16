@@ -8,6 +8,8 @@ import shutil
 import xml.etree.ElementTree as ET
 from absl.flags import FLAGS
 
+from yolov3_tf2.dataset import get_directory_xml_files
+
 flags.DEFINE_string('set_name', None, 'Name of the new set')
 flags.DEFINE_string(
     'frozen_dataset', None, 'Path to Frozen dataset'
@@ -47,17 +49,13 @@ def main(argv) -> None:
         )
         sys.exit(1)
 
-    set_files: list = []
     if not os.path.exists(os.path.join(FLAGS.set_output_folder, FLAGS.set_name)):
         create_set_folders()
 
     if not os.path.exists(str(FLAGS.frozen_dataset)):
         create_empty_dataset()
 
-    for _, _, files in os.walk(FLAGS.base_set_path, topdown=False):
-        for file in files:
-            if file.split('.')[1] == 'xml':
-                set_files.append(file)
+    set_files = get_directory_xml_files(FLAGS.base_set_path)
 
     persondet_dict: DefaultDict[str, str] = assign_set_to_persondet(set_files)
 
