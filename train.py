@@ -17,6 +17,7 @@ from yolov3_tf2.models import (
 )
 from yolov3_tf2.utils import freeze_all
 import yolov3_tf2.dataset as dataset
+from yolov3_tf2.dataset import augment_dataset_generator
 
 flags.DEFINE_string('dataset', '', 'path to dataset')
 flags.DEFINE_string('val_dataset', '', 'path to validation dataset')
@@ -44,6 +45,7 @@ flags.DEFINE_integer('weights_num_classes', None, 'specify num class for `weight
                      'useful in transfer learning with different number of classes')
 flags.DEFINE_string('checkpoints', '/run/media/juju/backup_loja/checkpoints/regular/train',
                     'folder to save the checkpoints to')
+flags.DEFINE_bool('data_augmentation', False, 'Chooses if using data augmentation or not')
 
 
 def main(_argv):
@@ -62,9 +64,18 @@ def main(_argv):
         anchor_masks = yolo_anchor_masks
 
     train_dataset = dataset.load_fake_dataset()
-    if FLAGS.dataset:
+
+    if FLAGS.data_augmentation:
+        train_dataset = tf.data.Dataset.from_generator(
+            augment_dataset_generator,
+            output_types=(tf.float32, tf.float32),
+            output_shapes=(tf.TensorShape([416,416,3]), tf.TensorShape([None,5])),
+            args=(FLAGS.dataset, FLAGS.classes, FLAGS.size)
+        )
+    else:
         train_dataset = dataset.load_tfrecord_dataset(
             FLAGS.dataset, FLAGS.classes, FLAGS.size)
+
     train_dataset = train_dataset.shuffle(buffer_size=512)
     train_dataset = train_dataset.batch(FLAGS.batch_size)
     train_dataset = train_dataset.map(lambda x, y: (
@@ -178,7 +189,7 @@ def main(_argv):
 
         callbacks = [
             ReduceLROnPlateau(verbose=1),
-            EarlyStopping(patience=3, verbose=1),
+            #EarlyStopping(patience=3, verbose=1),
             ModelCheckpoint(FLAGS.checkpoints + '/yolov3_train_{epoch}.tf',
                             verbose=1, save_weights_only=True),
             TensorBoard(log_dir='logs')

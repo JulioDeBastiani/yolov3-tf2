@@ -12,7 +12,9 @@ import tqdm
 import cv2
 import albumentations as A
 from typing import DefaultDict
-
+import numpy as np
+from tensorflow.keras.utils import Sequence
+TIMES = 0 # TEST
 
 @tf.function
 def transform_targets_for_output(y_true, grid_size, anchor_idxs):
@@ -114,20 +116,25 @@ IMAGE_FEATURE_MAP = {
 def parse_tfrecord(tfrecord, class_table, size):
     x = tf.io.parse_single_example(tfrecord, IMAGE_FEATURE_MAP)
     x_train = tf.image.decode_jpeg(x['image/encoded'], channels=3)
+
     x_train = tf.image.resize(x_train, (size, size))
 
     class_text = tf.sparse.to_dense(
         x['image/object/class/text'], default_value='')
     labels = tf.cast(class_table.lookup(class_text), tf.float32)
+    rows = tf.sparse.to_dense(x['image/object/bbox/xmin'])
+    rows = tf.print(rows, [rows], summarize=100)
 
-    y_train = tf.stack([tf.sparse.to_dense(x['image/object/bbox/xmin']),
-                        tf.sparse.to_dense(x['image/object/bbox/ymin']),
-                        tf.sparse.to_dense(x['image/object/bbox/xmax']),
-                        tf.sparse.to_dense(x['image/object/bbox/ymax']),
-                        labels], axis=1)
+    y_train = tf.stack([
+        tf.sparse.to_dense(x['image/object/bbox/xmin']),
+        tf.sparse.to_dense(x['image/object/bbox/ymin']),
+        tf.sparse.to_dense(x['image/object/bbox/xmax']),
+        tf.sparse.to_dense(x['image/object/bbox/ymax']),
+        labels
+    ], axis=1)
+
     # it used a flag to set it the max boxes possible
-    paddings = [[0, 100 - tf.shape(y_train)[0]], [0, 0]]
-    y_train = tf.pad(y_train, paddings)
+    y_train = add_pads_to_tensor(y_train, 100)
 
     return x_train, y_train
 
@@ -139,6 +146,7 @@ def load_tfrecord_dataset(file_pattern, class_file, size=416):
 
     files = tf.data.Dataset.list_files(file_pattern)
     dataset = files.flat_map(tf.data.TFRecordDataset)
+    print(dataset, end='dataset\n')
     return dataset.map(lambda x: parse_tfrecord(x, class_table, size))
 
 
@@ -236,7 +244,6 @@ def augment_image(annotation, images_dir, xml_data_dict, class_map):
         aug_image = transform(image=image, bboxes=bounding_boxes)
 
         a = cv2.imencode('.jpg', cv2.cvtColor(aug_image['image'], cv2.COLOR_RGB2BGR))[1].tostring()
-
  
         key = hashlib.sha256(a).hexdigest()
         file_name = annotation['filename'].replace('.jpg', f'--{aug_name}.jpg')
@@ -463,3 +470,172 @@ def get_default_augmentation_pipeline() -> list:
     ]
 
     return transformations, aug_names
+
+
+def augment_dataset(dataset, classes, size):
+
+    dataset_tensor = []
+
+    # for instance in dataset:
+    
+    img = cv2.cvtColor(instance[0].numpy(), cv2.COLOR_RGB2BGR)
+    # this transformation is due clahe supporting only this type
+    img = img.astype(np.uint8)
+
+    y_train = instance[1].numpy()
+    zero_removed_array = y_train[np.any(y_train > 0, axis=1)]
+
+    labels = tf.convert_to_tensor(zero_removed_array[:,4:5], tf.float32)
+    transformations, _ = get_default_augmentation_pipeline()
+    x_train_tensor = []
+    y_train_tensor = []
+
+
+    for transform in transformations:
+
+        aug_image = transform(image=img, bboxes=zero_removed_array)
+
+        encoded_img = cv2.imencode('.jpg', cv2.cvtColor(aug_image['image'], cv2.COLOR_RGB2BGR))[1].tostring()
+        x_train = tf.image.decode_jpeg(encoded_img, channels=3)
+        x_train /= 255
+        
+        aug_image['bboxes'] = np.asarray(aug_image['bboxes'])
+
+        y_train = tf.stack([
+            tf.convert_to_tensor(aug_image['bboxes'][:,0:1], dtype=tf.float32),
+            tf.convert_to_tensor(aug_image['bboxes'][:,1:2], dtype=tf.float32),
+            tf.convert_to_tensor(aug_image['bboxes'][:,2:3], dtype=tf.float32),
+            tf.convert_to_tensor(aug_image['bboxes'][:,3:4], dtype=tf.float32),
+            labels
+            ],
+            axis=1
+        )
+
+        y_train = tf.squeeze(y_train, axis=2)
+        if x_train_tensor == []:
+            x_train_tensor = tf.data.Dataset.from_tensor_slices(tf.expand_dims(x_train, 0))
+            y_train_tensor = tf.data.Dataset.from_tensor_slices(y_train)
+        else:
+            x_train_tensor = x_train_tensor.concatenate(tf.data.Dataset.from_tensor_slices(
+                tf.expand_dims(x_train, 0)
+            ))
+            y_train_tensor = y_train_tensor.concatenate(tf.data.Dataset.from_tensor_slices(
+                y_train
+            ))
+                
+
+        dataset_tensor = tf.data.Dataset.zip((x_train_tensor, y_train_tensor))
+
+        tf.print(dataset_tensor)
+
+    return dataset_tensor
+
+
+def augment_dataset_generator(file_pattern, class_file, size=416):
+
+    LINE_NUMBER = -1  # TODO: use tf.lookup.TextFileIndex.LINE_NUMBER
+    class_table = tf.lookup.StaticHashTable(tf.lookup.TextFileInitializer(
+        class_file, tf.string, 0, tf.int64, LINE_NUMBER, delimiter="\n"), -1)
+
+    files = tf.data.Dataset.list_files(file_pattern)
+    dataset = files.flat_map(tf.data.TFRecordDataset)
+
+    transformations, _ = get_default_augmentation_pipeline()
+    
+    for instance in dataset:
+
+        example = tf.io.parse_single_example(instance, IMAGE_FEATURE_MAP)
+
+        raw_image = tf.image.decode_image(example['image/encoded'], channels=3)
+
+        x_train = tf.image.resize(raw_image, (size, size))
+        #print(np.asarray(example['image/object/bbox/xmin']), end='x_obj\n')
+        class_text = tf.sparse.to_dense(example['image/object/class/text'], default_value='')
+        labels = tf.cast(class_table.lookup(class_text), tf.float32)
+        rows = tf.sparse.to_dense(example['image/object/bbox/xmin'])
+        rows = tf.print(rows, [rows], summarize=100)
+
+        y_train = tf.stack([
+            tf.sparse.to_dense(example['image/object/bbox/xmin']),
+            tf.sparse.to_dense(example['image/object/bbox/ymin']),
+            tf.sparse.to_dense(example['image/object/bbox/xmax']),
+            tf.sparse.to_dense(example['image/object/bbox/ymax']),
+            labels
+        ], axis=1)
+
+        y_train = add_pads_to_tensor(y_train, 100)
+   
+        yield x_train, y_train
+
+        for transformation in transformations:
+            yield apply_transformation(transformation, raw_image, y_train)
+
+
+def apply_transformation(transformation, raw_image, y_train):
+
+    img = cv2.cvtColor(raw_image.numpy(), cv2.COLOR_BGR2RGB)
+
+    img = img.astype(np.uint8)
+
+    y_train = y_train.numpy()
+    
+    zero_removed_array = y_train[np.any(y_train > 0, axis=1)]
+
+    labels = tf.convert_to_tensor(zero_removed_array[:,4:5], tf.float32)
+
+    aug_image = transformation(image=img, bboxes=zero_removed_array)
+
+    encoded_img = cv2.imencode('.jpg', cv2.cvtColor(aug_image['image'], cv2.COLOR_RGB2BGR))[1].tostring()
+    
+    x_train = tf.image.decode_jpeg(encoded_img, channels=3)
+
+    global TIMES
+
+    cv2.imwrite(f'./data/take_{TIMES}.jpg', img)
+
+    TIMES+=1
+
+    # TODO ongoing tests
+    # for bbox in list(y_train):
+    #     print(img.shape)
+    #     if max(bbox) <= 0:
+    #         continue
+    #     print(bbox[0] * img.shape[0])
+    #     print(bbox[1] * img.shape[0])
+
+    #     print(bbox[2] * img.shape[1])
+    #     print(bbox[3] * img.shape[1])
+    #     try:
+    #         img = cv2.rectangle(img, (bbox[0] * img.shape[0], bbox[1] * img.shape[1]), (bbox[2] * img.shape[0], bbox[3] * img.shape[1]), (255, 0, 0), 2)
+    #     except Exception as e:
+    #         input()
+    #     cv2.imwrite(f'./data/take_{TIMES}.jpg', img)
+
+    #     TIMES+=1
+
+    cv2.imwrite(f'./data/take_{TIMES}.jpg', img)
+    TIMES+=1
+
+
+    aug_image['bboxes'] = np.asarray(aug_image['bboxes'])
+
+    y_train = tf.stack([
+        tf.convert_to_tensor(aug_image['bboxes'][:,0:1], dtype=tf.float32),
+        tf.convert_to_tensor(aug_image['bboxes'][:,1:2], dtype=tf.float32),
+        tf.convert_to_tensor(aug_image['bboxes'][:,2:3], dtype=tf.float32),
+        tf.convert_to_tensor(aug_image['bboxes'][:,3:4], dtype=tf.float32),
+        labels
+        ],
+        axis=1
+    )
+    y_train = tf.squeeze(y_train, axis=2)
+    y_train = add_pads_to_tensor(y_train, 100)
+    x_train = tf.convert_to_tensor(x_train)
+    
+    return x_train, y_train
+
+
+def add_pads_to_tensor(tensor, pad_size):
+
+    paddings = [[0, pad_size - tf.shape(tensor)[0]], [0, 0]]
+    return tf.pad(tensor, paddings)
