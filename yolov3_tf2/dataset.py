@@ -2,15 +2,11 @@ import tensorflow as tf
 from absl import app, flags, logging
 from absl.flags import FLAGS
 from PIL import Image
-import time
-import random
 import os
-from io import BytesIO
 import hashlib
 import lxml.etree
 import tqdm
 import cv2
-import albumentations as A
 from typing import DefaultDict
 
 @tf.function
@@ -158,8 +154,7 @@ def load_fake_dataset():
 
 def build_example(annotation, class_map, images_dir):
     img_path = os.path.join(images_dir, annotation['filename'].replace('set_01', '').replace(".xml", ".jpg"))
-    # print("images_dir: " + images_dir)
-    # print("annotation['filename']: " + annotation['filename'])
+
     img_raw = open(img_path, 'rb').read()
     key = hashlib.sha256(img_raw).hexdigest()
 
