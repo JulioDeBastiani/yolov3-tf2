@@ -69,20 +69,29 @@ def main(_argv):
         train_dataset = tf.data.Dataset.from_generator(
             augment_dataset_generator,
             output_types=(tf.float32, tf.float32),
-            output_shapes=(tf.TensorShape([416,416,3]), tf.TensorShape([None,5])),
-            args=(FLAGS.dataset, FLAGS.classes, FLAGS.size)
+            output_shapes=(tf.TensorShape([FLAGS.size, FLAGS.size, 3]), tf.TensorShape([None, 5])),
+            args=(FLAGS.dataset, FLAGS.classes, FLAGS.size, anchors, anchor_masks)
         )
+        train_dataset = train_dataset.shuffle(buffer_size=512)
+        train_dataset = train_dataset.batch(FLAGS.batch_size)
+        # TODO add this to the augment pipeline
+        train_dataset = train_dataset.map(lambda x, y: (
+            x,
+            dataset.transform_targets(y, anchors, anchor_masks, FLAGS.size)
+        ))
     else:
         train_dataset = dataset.load_tfrecord_dataset(
             FLAGS.dataset, FLAGS.classes, FLAGS.size)
+        train_dataset = train_dataset.shuffle(buffer_size=512)
+        train_dataset = train_dataset.batch(FLAGS.batch_size)
+        train_dataset = train_dataset.map(lambda x, y: (
+            dataset.transform_images(x, FLAGS.size),
+            dataset.transform_targets(y, anchors, anchor_masks, FLAGS.size)
+        ))
 
-    train_dataset = train_dataset.shuffle(buffer_size=512)
-    train_dataset = train_dataset.batch(FLAGS.batch_size)
-    train_dataset = train_dataset.map(lambda x, y: (
-        dataset.transform_images(x, FLAGS.size),
-        dataset.transform_targets(y, anchors, anchor_masks, FLAGS.size)))
     train_dataset = train_dataset.prefetch(
-        buffer_size=tf.data.experimental.AUTOTUNE)
+        buffer_size=tf.data.experimental.AUTOTUNE
+    )
 
     val_dataset = dataset.load_fake_dataset()
     if FLAGS.val_dataset:

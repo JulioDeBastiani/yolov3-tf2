@@ -55,7 +55,7 @@ def main(argv) -> None:
     if not os.path.exists(str(FLAGS.frozen_dataset)):
         create_empty_dataset()
 
-    set_files = get_directory_xml_files(FLAGS.base_set_path)
+    set_files = get_directory_xml_files(FLAGS.base_set_path, '.jpg')
 
     persondet_dict: DefaultDict[str, str] = assign_set_to_persondet(set_files)
 

@@ -59,6 +59,7 @@ def transform_targets_for_output(y_true, grid_size, anchor_idxs):
 
 
 def transform_targets(y_train, anchors, anchor_masks, size):
+
     y_outs = []
     grid_size = size // 32
 
@@ -118,12 +119,10 @@ def parse_tfrecord(tfrecord, class_table, size):
     x_train = tf.image.decode_jpeg(x['image/encoded'], channels=3)
 
     x_train = tf.image.resize(x_train, (size, size))
-
+    
     class_text = tf.sparse.to_dense(
         x['image/object/class/text'], default_value='')
     labels = tf.cast(class_table.lookup(class_text), tf.float32)
-    rows = tf.sparse.to_dense(x['image/object/bbox/xmin'])
-    rows = tf.print(rows, [rows], summarize=100)
 
     y_train = tf.stack([
         tf.sparse.to_dense(x['image/object/bbox/xmin']),
@@ -146,7 +145,7 @@ def load_tfrecord_dataset(file_pattern, class_file, size=416):
 
     files = tf.data.Dataset.list_files(file_pattern)
     dataset = files.flat_map(tf.data.TFRecordDataset)
-    print(dataset, end='dataset\n')
+
     return dataset.map(lambda x: parse_tfrecord(x, class_table, size))
 
 
@@ -512,6 +511,7 @@ def augment_dataset(dataset, classes, size):
         )
 
         y_train = tf.squeeze(y_train, axis=2)
+
         if x_train_tensor == []:
             x_train_tensor = tf.data.Dataset.from_tensor_slices(tf.expand_dims(x_train, 0))
             y_train_tensor = tf.data.Dataset.from_tensor_slices(y_train)
@@ -526,12 +526,10 @@ def augment_dataset(dataset, classes, size):
 
         dataset_tensor = tf.data.Dataset.zip((x_train_tensor, y_train_tensor))
 
-        tf.print(dataset_tensor)
-
     return dataset_tensor
 
 
-def augment_dataset_generator(file_pattern, class_file, size=416):
+def augment_dataset_generator(file_pattern, class_file, size, anchors, anchor_masks):
 
     LINE_NUMBER = -1  # TODO: use tf.lookup.TextFileIndex.LINE_NUMBER
     class_table = tf.lookup.StaticHashTable(tf.lookup.TextFileInitializer(
@@ -552,8 +550,6 @@ def augment_dataset_generator(file_pattern, class_file, size=416):
         #print(np.asarray(example['image/object/bbox/xmin']), end='x_obj\n')
         class_text = tf.sparse.to_dense(example['image/object/class/text'], default_value='')
         labels = tf.cast(class_table.lookup(class_text), tf.float32)
-        rows = tf.sparse.to_dense(example['image/object/bbox/xmin'])
-        rows = tf.print(rows, [rows], summarize=100)
 
         y_train = tf.stack([
             tf.sparse.to_dense(example['image/object/bbox/xmin']),
@@ -564,14 +560,14 @@ def augment_dataset_generator(file_pattern, class_file, size=416):
         ], axis=1)
 
         y_train = add_pads_to_tensor(y_train, 100)
-   
-        yield x_train, y_train
+
+        yield transform_images(x_train, size), y_train
 
         for transformation in transformations:
-            yield apply_transformation(transformation, raw_image, y_train)
+            yield apply_transformation(transformation, raw_image, y_train, size, anchors, anchor_masks)
 
 
-def apply_transformation(transformation, raw_image, y_train):
+def apply_transformation(transformation, raw_image, y_train, size, anchors, anchor_masks):
 
     img = cv2.cvtColor(raw_image.numpy(), cv2.COLOR_BGR2RGB)
 
@@ -586,36 +582,7 @@ def apply_transformation(transformation, raw_image, y_train):
     aug_image = transformation(image=img, bboxes=zero_removed_array)
 
     encoded_img = cv2.imencode('.jpg', cv2.cvtColor(aug_image['image'], cv2.COLOR_RGB2BGR))[1].tostring()
-    
     x_train = tf.image.decode_jpeg(encoded_img, channels=3)
-
-    global TIMES
-
-    cv2.imwrite(f'./data/take_{TIMES}.jpg', img)
-
-    TIMES+=1
-
-    # TODO ongoing tests
-    # for bbox in list(y_train):
-    #     print(img.shape)
-    #     if max(bbox) <= 0:
-    #         continue
-    #     print(bbox[0] * img.shape[0])
-    #     print(bbox[1] * img.shape[0])
-
-    #     print(bbox[2] * img.shape[1])
-    #     print(bbox[3] * img.shape[1])
-    #     try:
-    #         img = cv2.rectangle(img, (bbox[0] * img.shape[0], bbox[1] * img.shape[1]), (bbox[2] * img.shape[0], bbox[3] * img.shape[1]), (255, 0, 0), 2)
-    #     except Exception as e:
-    #         input()
-    #     cv2.imwrite(f'./data/take_{TIMES}.jpg', img)
-
-    #     TIMES+=1
-
-    cv2.imwrite(f'./data/take_{TIMES}.jpg', img)
-    TIMES+=1
-
 
     aug_image['bboxes'] = np.asarray(aug_image['bboxes'])
 
@@ -631,8 +598,8 @@ def apply_transformation(transformation, raw_image, y_train):
     y_train = tf.squeeze(y_train, axis=2)
     y_train = add_pads_to_tensor(y_train, 100)
     x_train = tf.convert_to_tensor(x_train)
-    
-    return x_train, y_train
+
+    return transform_images(x_train, size), y_train
 
 
 def add_pads_to_tensor(tensor, pad_size):
