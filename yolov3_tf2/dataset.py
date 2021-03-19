@@ -3,11 +3,15 @@ from absl import app, flags, logging
 from absl.flags import FLAGS
 from PIL import Image
 import time
+import random
 import os
+from io import BytesIO
 import hashlib
 import lxml.etree
 import tqdm
-
+import cv2
+import albumentations as A
+from typing import DefaultDict
 
 @tf.function
 def transform_targets_for_output(y_true, grid_size, anchor_idxs):
@@ -106,7 +110,7 @@ IMAGE_FEATURE_MAP = {
 }
 
 
-def parse_tfrecord(tfrecord, class_table, size):
+def parse_tfrecord(tfrecord, class_table, size, max_yolo_boxes):
     x = tf.io.parse_single_example(tfrecord, IMAGE_FEATURE_MAP)
     x_train = tf.image.decode_jpeg(x['image/encoded'], channels=3)
     x_train = tf.image.resize(x_train, (size, size))
@@ -120,20 +124,20 @@ def parse_tfrecord(tfrecord, class_table, size):
                         tf.sparse.to_dense(x['image/object/bbox/ymax']),
                         labels], axis=1)
 
-    paddings = [[0, FLAGS.yolo_max_boxes - tf.shape(y_train)[0]], [0, 0]]
+    paddings = [[0, max_yolo_boxes - tf.shape(y_train)[0]], [0, 0]]
     y_train = tf.pad(y_train, paddings)
 
     return x_train, y_train
 
 
-def load_tfrecord_dataset(file_pattern, class_file, size=416):
+def load_tfrecord_dataset(file_pattern, class_file, size, max_yolo_boxes):
     LINE_NUMBER = -1  # TODO: use tf.lookup.TextFileIndex.LINE_NUMBER
     class_table = tf.lookup.StaticHashTable(tf.lookup.TextFileInitializer(
         class_file, tf.string, 0, tf.int64, LINE_NUMBER, delimiter="\n"), -1)
 
     files = tf.data.Dataset.list_files(file_pattern)
     dataset = files.flat_map(tf.data.TFRecordDataset)
-    return dataset.map(lambda x: parse_tfrecord(x, class_table, size))
+    return dataset.map(lambda x: parse_tfrecord(x, class_table, size, max_yolo_boxes))
 
 
 def load_fake_dataset():
@@ -267,23 +271,107 @@ def parse_xml(xml):
     return {xml.tag: result}
 
 
-def parse_set(class_map, out_file, annotations_dir, images_dir):
+def parse_set(class_map, out_file, annotations_dir, images_dir, aumentation):
     writer = tf.io.TFRecordWriter(out_file)
 
     for annotation_file in tqdm.tqdm(os.listdir(annotations_dir)):
         if not annotation_file.endswith('.xml'):
             continue
 
-        # print("file: " + annotation_file)
         annotation_xml = os.path.join(annotations_dir, annotation_file)
         annotation_xml = lxml.etree.fromstring(open(annotation_xml).read())
         annotation = parse_xml(annotation_xml)['annotation']
 
+        height, width = get_image_dimensions(annotation, images_dir)
         try:
-            tf_example = build_example(annotation, class_map, images_dir)
-            writer.write(tf_example.SerializeToString())
+            xml_data_dict = extract_xml_data(annotation, class_map, height, width)
+        except Exception:
+            continue
+
+        if len(xml_data_dict['classes']) > 100:
+            logging.error(f"too many classes ({len(xml_data_dict['classes'])}) on {annotation_xml}")
+            continue
+
+        try:
+            raw_image, key = open_image(annotation, images_dir, xml_data_dict)
         except:
-            pass
+            continue
+
+        tf_example = build_example(annotation['filename'], images_dir, xml_data_dict, raw_image, key)
+        writer.write(tf_example.SerializeToString())
+
+        if aumentation:
+            tf_examples = augment_image(annotation, images_dir, xml_data_dict, class_map)
+            for tf_example in tf_examples:
+                writer.write(tf_example.SerializeToString())
 
     writer.close()
     logging.info(f"Wrote {out_file}")
+
+
+def get_image_dimensions(annotation, images_dir):
+
+    img_path = os.path.join(
+        images_dir, annotation['filename'].replace('set_01', '').replace(".xml", ".jpg")
+    )
+
+    try:
+        width = int(annotation['size']['width'])
+        height = int(annotation['size']['height'])
+    except KeyError:
+        im = Image.open(img_path)
+        width, height = im.size
+    width = width if width > 0 else 416
+    height = height if height > 0 else 416
+
+    return height, width
+
+
+def extract_xml_data(annotation, class_map, height, width) -> DefaultDict:
+
+    xml_data_dict: DefaultDict = DefaultDict(list)
+
+    if 'object' in annotation:
+        for obj in annotation['object']:
+            if not obj['name'] in class_map:
+                logging.warning(f"weird name {obj['name']}")
+                raise Exception
+
+            if float(obj['bndbox']['xmin']) > width or float(obj['bndbox']['xmin']) < 0:
+                logging.warning(f"bad xmin {obj['bndbox']['xmin']}")
+                raise Exception
+
+            if float(obj['bndbox']['ymin']) > height or float(obj['bndbox']['ymin']) < 0:
+                logging.warning(f"bad ymin {obj['bndbox']['ymin']}")
+                raise Exception
+
+            if float(obj['bndbox']['xmax']) > width or float(obj['bndbox']['xmax']) < 0:
+                logging.warning(f"bad xmax {obj['bndbox']['xmax']}")
+                raise Exception
+
+            if float(obj['bndbox']['ymax']) > height or float(obj['bndbox']['ymax']) < 0:
+                logging.warning(f"bad ymax {obj['bndbox']['ymax']}")
+                raise Exception
+
+            difficult = bool(int(obj['difficult']))
+            xml_data_dict['difficult'].append(int(difficult))
+            xml_data_dict['xmin'].append(float(obj['bndbox']['xmin']) / width)
+            xml_data_dict['ymin'].append(float(obj['bndbox']['ymin']) / height)
+            xml_data_dict['xmax'].append(float(obj['bndbox']['xmax']) / width)
+            xml_data_dict['ymax'].append(float(obj['bndbox']['ymax']) / height)
+            xml_data_dict['classes_text'].append(obj['name'].encode('utf8'))
+            xml_data_dict['classes'].append(class_map[obj['name']])
+            xml_data_dict['height'].append(height)
+            xml_data_dict['width'].append(width)
+
+            try:
+                xml_data_dict['truncated'].append(int(obj['truncated']))
+            except:
+                pass
+
+            try:
+                xml_data_dict['views'].append(obj['pose'].encode('utf8'))
+            except:
+                pass
+
+    return xml_data_dict

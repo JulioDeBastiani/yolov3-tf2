@@ -23,6 +23,9 @@ flags.DEFINE_string(
 flags.DEFINE_string(
     'set_output_folder', None, 'Path to the dataset output'
 )
+flags.DEFINE_string(
+    'images_format', '.jpg', 'THe format the images are in.'
+)
 
 flags.DEFINE_float(
     'set_dev_percentage', .15, 'Percentage of dev created from dataset.'
@@ -33,6 +36,7 @@ flags.DEFINE_float(
 flags.DEFINE_float(
     'set_val_percentage', .15, 'Percentage of validation created from dataset.'
 )
+
 
 flags.mark_flags_as_required(['set_name', 'base_set_path'])
 
@@ -55,7 +59,7 @@ def main(argv) -> None:
     if not os.path.exists(str(FLAGS.frozen_dataset)):
         create_empty_dataset()
 
-    set_files = get_directory_xml_files(FLAGS.base_set_path)
+    set_files = get_directory_xml_files(FLAGS.base_set_path, FLAGS.images_format)
 
     persondet_dict: DefaultDict[str, str] = assign_set_to_persondet(set_files)
 

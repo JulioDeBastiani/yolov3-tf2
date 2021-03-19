@@ -36,7 +36,7 @@ def main(_argv):
         FLAGS.output_val_file,
         FLAGS.val_labels_dir,
         FLAGS.val_data_dir,
-        FLAGS.data_augmentation
+        False
     )
 
     logging.info("Done")
