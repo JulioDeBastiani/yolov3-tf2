@@ -16,7 +16,7 @@ flags.DEFINE_string('output_train_file', './data/set_03_train.tfrecord', 'outpot
 flags.DEFINE_string('output_val_file', './data/set_03_val.tfrecord', 'outpot dataset')
 flags.DEFINE_string('classes', './data/person-det.names', 'classes file')
 
-flags.DEFINE_bool('data_augmentation', False, 'Chooses if using data augmentation or not')
+flags.DEFINE_bool('data_augmentation', True, 'Chooses if using data augmentation or not')
 
 
 def main(_argv):
