@@ -24,7 +24,7 @@ flags.DEFINE_string(
     'set_output_folder', None, 'Path to the dataset output'
 )
 flags.DEFINE_string(
-    'images_format', '.jpg', 'THe format the images are in.'
+    'images_format', '.jpg', 'The format the images are in.'
 )
 
 flags.DEFINE_float(
