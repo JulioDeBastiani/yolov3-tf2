@@ -324,7 +324,7 @@ def get_image_dimensions(annotation, images_dir):
 
 def parse_pascal_voc_annotation(annotation, class_map, height, width) -> DefaultDict:
 
-    xml_data_dict: DefaultDict = DefaultDict(list)
+    pascal_voc_annotation_dict: DefaultDict = DefaultDict(list)
 
     if 'object' in annotation:
         for obj in annotation['object']:
@@ -369,4 +369,4 @@ def parse_pascal_voc_annotation(annotation, class_map, height, width) -> Default
             except:
                 pass
 
-    return xml_data_dict
+    return pascal_voc_annotation_dict
