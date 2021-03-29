@@ -279,24 +279,24 @@ def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augm
 
         height, width = get_image_dimensions(annotation, images_dir)
         try:
-            xml_data_dict = extract_xml_data(annotation, class_map, height, width)
+            pascal_voc_annotation_dict = parse_pascal_voc_annotation(annotation, class_map, height, width)
         except Exception:
             continue
 
-        if len(xml_data_dict['classes']) > 100:
-            logging.error(f"too many classes ({len(xml_data_dict['classes'])}) on {annotation_xml}")
+        if len(pascal_voc_annotation_dict['classes']) > 100:
+            logging.error(f"too many classes ({len(pascal_voc_annotation_dict['classes'])}) on {annotation_xml}")
             continue
 
         try:
-            raw_image, key = open_image(annotation, images_dir, xml_data_dict)
+            raw_image, key = open_image(annotation, images_dir, pascal_voc_annotation_dict)
         except:
             continue
 
-        tf_example = build_example(annotation['filename'], images_dir, xml_data_dict, raw_image, key)
+        tf_example = build_example(annotation['filename'], images_dir, pascal_voc_annotation_dict, raw_image, key)
         writer.write(tf_example.SerializeToString())
 
         if use_dataset_augmentation:
-            tf_examples = augment_image(annotation, images_dir, xml_data_dict, class_map)
+            tf_examples = augment_image(annotation, images_dir, pascal_voc_annotation_dict, class_map)
             for tf_example in tf_examples:
                 writer.write(tf_example.SerializeToString())
 
@@ -322,7 +322,7 @@ def get_image_dimensions(annotation, images_dir):
     return height, width
 
 
-def extract_xml_data(annotation, class_map, height, width) -> DefaultDict:
+def parse_pascal_voc_annotation(annotation, class_map, height, width) -> DefaultDict:
 
     xml_data_dict: DefaultDict = DefaultDict(list)
 
