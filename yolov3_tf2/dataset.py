@@ -266,7 +266,7 @@ def parse_xml(xml):
     return {xml.tag: result}
 
 
-def parse_set(class_map, out_file, annotations_dir, images_dir, aumentation):
+def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augmentation):
     writer = tf.io.TFRecordWriter(out_file)
 
     for annotation_file in tqdm.tqdm(os.listdir(annotations_dir)):
@@ -295,7 +295,7 @@ def parse_set(class_map, out_file, annotations_dir, images_dir, aumentation):
         tf_example = build_example(annotation['filename'], images_dir, xml_data_dict, raw_image, key)
         writer.write(tf_example.SerializeToString())
 
-        if aumentation:
+        if use_dataset_augmentation:
             tf_examples = augment_image(annotation, images_dir, xml_data_dict, class_map)
             for tf_example in tf_examples:
                 writer.write(tf_example.SerializeToString())
