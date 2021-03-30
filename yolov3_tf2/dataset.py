@@ -2,7 +2,6 @@ import tensorflow as tf
 from absl import app, flags, logging
 from absl.flags import FLAGS
 import albumentations as A
-from PIL import Image
 import random
 import os
 import hashlib
@@ -217,7 +216,7 @@ def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augm
             continue
 
         try:
-            raw_image, key = open_image(annotation, images_dir, pascal_voc_dict)
+            raw_image, key = open_image(annotation, images_dir)
         except:
             logging.error(f'Could not open image {annotation["filename"]} at {images_dir}.')
             continue
@@ -244,8 +243,8 @@ def get_image_dimensions(annotation, images_dir):
         width = int(annotation['size']['width'])
         height = int(annotation['size']['height'])
     except KeyError:
-        im = Image.open(img_path)
-        width, height = im.size
+        im = cv2.imread(img_path)
+        height, width, _ = im.shape
     width = width if width > 0 else 416
     height = height if height > 0 else 416
 
@@ -302,7 +301,7 @@ def parse_pascal_voc(annotation, class_map, height, width) -> DefaultDict:
     return pascal_voc_dict
 
 
-def open_image(annotation, images_dir, xml_data_dict):
+def open_image(annotation, images_dir):
 
     img_path = os.path.join(
         images_dir, annotation['filename'].replace('set_01', '').replace(".xml", ".jpg")
