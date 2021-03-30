@@ -151,7 +151,7 @@ def load_fake_dataset():
 
     return tf.data.Dataset.from_tensor_slices((x_train, y_train))
 
-
+# this method is modified in the next PR making it only build the example
 def build_example(annotation, class_map, images_dir):
     img_path = os.path.join(images_dir, annotation['filename'].replace('set_01', '').replace(".xml", ".jpg"))
 
@@ -214,16 +214,6 @@ def build_example(annotation, class_map, images_dir):
             classes_text.append(obj['name'].encode('utf8'))
             classes.append(class_map[obj['name']])
 
-            try:
-                truncated.append(int(obj['truncated']))
-            except:
-                pass
-
-            try:
-                views.append(obj['pose'].encode('utf8'))
-            except:
-                pass
-
     if len(classes) > 100:
         print(f"too many classes ({len(classes)}) on {img_path}")
         raise Exception(f"too many classes ({len(classes)}) on {img_path}")
@@ -245,8 +235,6 @@ def build_example(annotation, class_map, images_dir):
         'image/object/class/text': tf.train.Feature(bytes_list=tf.train.BytesList(value=classes_text)),
         'image/object/class/label': tf.train.Feature(int64_list=tf.train.Int64List(value=classes)),
         'image/object/difficult': tf.train.Feature(int64_list=tf.train.Int64List(value=difficult_obj)),
-        'image/object/truncated': tf.train.Feature(int64_list=tf.train.Int64List(value=truncated)),
-        'image/object/view': tf.train.Feature(bytes_list=tf.train.BytesList(value=views)),
     }))
     return example
 
@@ -288,11 +276,9 @@ def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augm
             logging.error(f"too many classes ({len(pascal_voc_annotation_dict['classes'])}) on {annotation_xml}")
             continue
 
-        try:
-            raw_image, key = open_image(annotation, images_dir, pascal_voc_annotation_dict)
-        except:
-            logging.warning(f'Could not open {annotation["filename"]} at {images_dir}')
-            continue
+        # TODO ADD warning logs in the method open_image
+        # logging.warning(f'Could not open {annotation["filename"]} at {images_dir}')
+        raw_image, key = open_image(annotation, images_dir, pascal_voc_annotation_dict)
 
         tf_example = build_example(annotation['filename'], images_dir, pascal_voc_annotation_dict, raw_image, key)
         writer.write(tf_example.SerializeToString())
@@ -360,15 +346,5 @@ def parse_pascal_voc_annotation(annotation, class_map, height, width) -> Default
             xml_data_dict['classes'].append(class_map[obj['name']])
             xml_data_dict['height'].append(height)
             xml_data_dict['width'].append(width)
-
-            try:
-                xml_data_dict['truncated'].append(int(obj['truncated']))
-            except:
-                pass
-
-            try:
-                xml_data_dict['views'].append(obj['pose'].encode('utf8'))
-            except:
-                pass
 
     return pascal_voc_annotation_dict
