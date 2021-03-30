@@ -195,7 +195,7 @@ def parse_xml(xml):
     return {xml.tag: result}
 
 
-def parse_set(class_map, out_file, annotations_dir, images_dir, aumentation):
+def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augmentation):
     writer = tf.io.TFRecordWriter(out_file)
 
     for annotation_file in tqdm.tqdm(os.listdir(annotations_dir)):
@@ -208,25 +208,25 @@ def parse_set(class_map, out_file, annotations_dir, images_dir, aumentation):
 
         height, width = get_image_dimensions(annotation, images_dir)
         try:
-            xml_data_dict = extract_xml_data(annotation, class_map, height, width)
+            pascal_voc_dict = parse_pascal_voc(annotation, class_map, height, width)
         except Exception:
             continue
 
-        if len(xml_data_dict['classes']) > 100:
-            logging.error(f"too many classes ({len(xml_data_dict['classes'])}) on {annotation_xml}")
+        if len(pascal_voc_dict['classes']) > 100:
+            logging.error(f"too many classes ({len(pascal_voc_dict['classes'])}) on {annotation_xml}")
             continue
 
         try:
-            raw_image, key = open_image(annotation, images_dir, xml_data_dict)
+            raw_image, key = open_image(annotation, images_dir, pascal_voc_dict)
         except:
             logging.error(f'Could not open image {annotation["filename"]} at {images_dir}.')
             continue
 
-        tf_example = build_example(annotation['filename'], images_dir, xml_data_dict, raw_image, key)
+        tf_example = build_example(annotation['filename'], images_dir, pascal_voc_dict, raw_image, key)
         writer.write(tf_example.SerializeToString())
 
-        if aumentation:
-            tf_examples = augment_image(annotation, images_dir, xml_data_dict, class_map)
+        if use_dataset_augmentation:
+            tf_examples = augment_image(annotation, images_dir, pascal_voc_dict, class_map)
             for tf_example in tf_examples:
                 writer.write(tf_example.SerializeToString())
 
@@ -252,9 +252,9 @@ def get_image_dimensions(annotation, images_dir):
     return height, width
 
 
-def extract_xml_data(annotation, class_map, height, width) -> DefaultDict:
+def parse_pascal_voc(annotation, class_map, height, width) -> DefaultDict:
 
-    xml_data_dict: DefaultDict = DefaultDict(list)
+    pascal_voc_dict: DefaultDict = DefaultDict(list)
 
     if 'object' in annotation:
         for obj in annotation['object']:
@@ -279,27 +279,28 @@ def extract_xml_data(annotation, class_map, height, width) -> DefaultDict:
                 raise Exception
 
             difficult = bool(int(obj['difficult']))
-            xml_data_dict['difficult'].append(int(difficult))
-            xml_data_dict['xmin'].append(float(obj['bndbox']['xmin']) / width)
-            xml_data_dict['ymin'].append(float(obj['bndbox']['ymin']) / height)
-            xml_data_dict['xmax'].append(float(obj['bndbox']['xmax']) / width)
-            xml_data_dict['ymax'].append(float(obj['bndbox']['ymax']) / height)
-            xml_data_dict['classes_text'].append(obj['name'].encode('utf8'))
-            xml_data_dict['classes'].append(class_map[obj['name']])
-            xml_data_dict['height'].append(height)
-            xml_data_dict['width'].append(width)
+            pascal_voc_dict['difficult'].append(int(difficult))
+            pascal_voc_dict['xmin'].append(float(obj['bndbox']['xmin']) / width)
+            pascal_voc_dict['ymin'].append(float(obj['bndbox']['ymin']) / height)
+            pascal_voc_dict['xmax'].append(float(obj['bndbox']['xmax']) / width)
+            pascal_voc_dict['ymax'].append(float(obj['bndbox']['ymax']) / height)
+            pascal_voc_dict['classes_text'].append(obj['name'].encode('utf8'))
+            pascal_voc_dict['classes'].append(class_map[obj['name']])
+            pascal_voc_dict['height'].append(height)
+            pascal_voc_dict['width'].append(width)
 
             try:
-                xml_data_dict['truncated'].append(int(obj['truncated']))
+                pascal_voc_dict['truncated'].append(int(obj['truncated']))
             except:
                 pass
 
             try:
-                xml_data_dict['views'].append(obj['pose'].encode('utf8'))
+                pascal_voc_dict['views'].append(obj['pose'].encode('utf8'))
             except:
                 pass
 
-    return xml_data_dict
+    return pascal_voc_dict
+
 
 def open_image(annotation, images_dir, xml_data_dict):
 

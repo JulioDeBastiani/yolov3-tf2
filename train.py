@@ -44,7 +44,7 @@ flags.DEFINE_integer('weights_num_classes', None, 'specify num class for `weight
                      'useful in transfer learning with different number of classes')
 flags.DEFINE_string('checkpoints', '/run/media/juju/backup_loja/checkpoints/regular/train',
                     'folder to save the checkpoints to')
-flags.DEFINE_integer('max_yolo_boxes', 100, 'The max quanttity of boxes for the yolo model')
+flags.DEFINE_integer('max_yolo_boxes', 100, 'The maximum quantity of boxes for the yolo model')
 
 
 def main(_argv):
