@@ -267,6 +267,7 @@ def parse_xml(xml):
 
 
 def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augmentation):
+
     writer = tf.io.TFRecordWriter(out_file)
 
     for annotation_file in tqdm.tqdm(os.listdir(annotations_dir)):
@@ -278,9 +279,9 @@ def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augm
         annotation = parse_xml(annotation_xml)['annotation']
 
         height, width = get_image_dimensions(annotation, images_dir)
-        try:
-            pascal_voc_annotation_dict = parse_pascal_voc_annotation(annotation, class_map, height, width)
-        except Exception:
+
+        pascal_voc_annotation_dict = parse_pascal_voc_annotation(annotation, class_map, height, width)
+        if not pascal_voc_annotation_dict:
             continue
 
         if len(pascal_voc_annotation_dict['classes']) > 100:
@@ -290,6 +291,7 @@ def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augm
         try:
             raw_image, key = open_image(annotation, images_dir, pascal_voc_annotation_dict)
         except:
+            logging.warning(f'Could not open {annotation["filename"]} at {images_dir}')
             continue
 
         tf_example = build_example(annotation['filename'], images_dir, pascal_voc_annotation_dict, raw_image, key)
@@ -301,7 +303,7 @@ def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augm
                 writer.write(tf_example.SerializeToString())
 
     writer.close()
-    logging.info(f"Wrote {out_file}")
+    logging.info(f'Wrote {out_file}')
 
 
 def get_image_dimensions(annotation, images_dir):
@@ -330,23 +332,23 @@ def parse_pascal_voc_annotation(annotation, class_map, height, width) -> Default
         for obj in annotation['object']:
             if not obj['name'] in class_map:
                 logging.warning(f"weird name {obj['name']}")
-                raise Exception
+                return
 
             if float(obj['bndbox']['xmin']) > width or float(obj['bndbox']['xmin']) < 0:
                 logging.warning(f"bad xmin {obj['bndbox']['xmin']}")
-                raise Exception
+                return
 
             if float(obj['bndbox']['ymin']) > height or float(obj['bndbox']['ymin']) < 0:
                 logging.warning(f"bad ymin {obj['bndbox']['ymin']}")
-                raise Exception
+                return
 
             if float(obj['bndbox']['xmax']) > width or float(obj['bndbox']['xmax']) < 0:
                 logging.warning(f"bad xmax {obj['bndbox']['xmax']}")
-                raise Exception
+                return
 
             if float(obj['bndbox']['ymax']) > height or float(obj['bndbox']['ymax']) < 0:
                 logging.warning(f"bad ymax {obj['bndbox']['ymax']}")
-                raise Exception
+                return
 
             difficult = bool(int(obj['difficult']))
             xml_data_dict['difficult'].append(int(difficult))
