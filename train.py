@@ -44,6 +44,7 @@ flags.DEFINE_integer('weights_num_classes', None, 'specify num class for `weight
                      'useful in transfer learning with different number of classes')
 flags.DEFINE_string('checkpoints', '/run/media/juju/backup_loja/checkpoints/regular/train',
                     'folder to save the checkpoints to')
+flags.DEFINE_integer('max_yolo_boxes', 100, 'The maximum quantity of boxes for the yolo model')
 
 
 def main(_argv):
@@ -64,7 +65,7 @@ def main(_argv):
     train_dataset = dataset.load_fake_dataset()
     if FLAGS.dataset:
         train_dataset = dataset.load_tfrecord_dataset(
-            FLAGS.dataset, FLAGS.classes, FLAGS.size)
+            FLAGS.dataset, FLAGS.classes, FLAGS.size, FLAGS.max_yolo_boxes)
     train_dataset = train_dataset.shuffle(buffer_size=512)
     train_dataset = train_dataset.batch(FLAGS.batch_size)
     train_dataset = train_dataset.map(lambda x, y: (
@@ -76,7 +77,7 @@ def main(_argv):
     val_dataset = dataset.load_fake_dataset()
     if FLAGS.val_dataset:
         val_dataset = dataset.load_tfrecord_dataset(
-            FLAGS.val_dataset, FLAGS.classes, FLAGS.size)
+            FLAGS.val_dataset, FLAGS.classes, FLAGS.size, FLAGS.max_yolo_boxes)
     val_dataset = val_dataset.batch(FLAGS.batch_size)
     val_dataset = val_dataset.map(lambda x, y: (
         dataset.transform_images(x, FLAGS.size),

@@ -2,12 +2,12 @@ import tensorflow as tf
 from absl import app, flags, logging
 from absl.flags import FLAGS
 from PIL import Image
-import time
 import os
 import hashlib
 import lxml.etree
 import tqdm
-
+import cv2
+from typing import DefaultDict
 
 @tf.function
 def transform_targets_for_output(y_true, grid_size, anchor_idxs):
@@ -106,7 +106,7 @@ IMAGE_FEATURE_MAP = {
 }
 
 
-def parse_tfrecord(tfrecord, class_table, size):
+def parse_tfrecord(tfrecord, class_table, size, max_yolo_boxes):
     x = tf.io.parse_single_example(tfrecord, IMAGE_FEATURE_MAP)
     x_train = tf.image.decode_jpeg(x['image/encoded'], channels=3)
     x_train = tf.image.resize(x_train, (size, size))
@@ -120,20 +120,20 @@ def parse_tfrecord(tfrecord, class_table, size):
                         tf.sparse.to_dense(x['image/object/bbox/ymax']),
                         labels], axis=1)
 
-    paddings = [[0, FLAGS.yolo_max_boxes - tf.shape(y_train)[0]], [0, 0]]
+    paddings = [[0, max_yolo_boxes - tf.shape(y_train)[0]], [0, 0]]
     y_train = tf.pad(y_train, paddings)
 
     return x_train, y_train
 
 
-def load_tfrecord_dataset(file_pattern, class_file, size=416):
+def load_tfrecord_dataset(file_pattern, class_file, size, max_yolo_boxes):
     LINE_NUMBER = -1  # TODO: use tf.lookup.TextFileIndex.LINE_NUMBER
     class_table = tf.lookup.StaticHashTable(tf.lookup.TextFileInitializer(
         class_file, tf.string, 0, tf.int64, LINE_NUMBER, delimiter="\n"), -1)
 
     files = tf.data.Dataset.list_files(file_pattern)
     dataset = files.flat_map(tf.data.TFRecordDataset)
-    return dataset.map(lambda x: parse_tfrecord(x, class_table, size))
+    return dataset.map(lambda x: parse_tfrecord(x, class_table, size, max_yolo_boxes))
 
 
 def load_fake_dataset():
@@ -151,11 +151,10 @@ def load_fake_dataset():
 
     return tf.data.Dataset.from_tensor_slices((x_train, y_train))
 
-
+# this method is modified in the next PR making it only build the example
 def build_example(annotation, class_map, images_dir):
     img_path = os.path.join(images_dir, annotation['filename'].replace('set_01', '').replace(".xml", ".jpg"))
-    # print("images_dir: " + images_dir)
-    # print("annotation['filename']: " + annotation['filename'])
+
     img_raw = open(img_path, 'rb').read()
     key = hashlib.sha256(img_raw).hexdigest()
 
@@ -215,16 +214,6 @@ def build_example(annotation, class_map, images_dir):
             classes_text.append(obj['name'].encode('utf8'))
             classes.append(class_map[obj['name']])
 
-            try:
-                truncated.append(int(obj['truncated']))
-            except:
-                pass
-
-            try:
-                views.append(obj['pose'].encode('utf8'))
-            except:
-                pass
-
     if len(classes) > 100:
         print(f"too many classes ({len(classes)}) on {img_path}")
         raise Exception(f"too many classes ({len(classes)}) on {img_path}")
@@ -246,8 +235,6 @@ def build_example(annotation, class_map, images_dir):
         'image/object/class/text': tf.train.Feature(bytes_list=tf.train.BytesList(value=classes_text)),
         'image/object/class/label': tf.train.Feature(int64_list=tf.train.Int64List(value=classes)),
         'image/object/difficult': tf.train.Feature(int64_list=tf.train.Int64List(value=difficult_obj)),
-        'image/object/truncated': tf.train.Feature(int64_list=tf.train.Int64List(value=truncated)),
-        'image/object/view': tf.train.Feature(bytes_list=tf.train.BytesList(value=views)),
     }))
     return example
 
@@ -267,23 +254,97 @@ def parse_xml(xml):
     return {xml.tag: result}
 
 
-def parse_set(class_map, out_file, annotations_dir, images_dir):
+def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augmentation):
+
     writer = tf.io.TFRecordWriter(out_file)
 
     for annotation_file in tqdm.tqdm(os.listdir(annotations_dir)):
         if not annotation_file.endswith('.xml'):
             continue
 
-        # print("file: " + annotation_file)
         annotation_xml = os.path.join(annotations_dir, annotation_file)
         annotation_xml = lxml.etree.fromstring(open(annotation_xml).read())
         annotation = parse_xml(annotation_xml)['annotation']
 
-        try:
-            tf_example = build_example(annotation, class_map, images_dir)
-            writer.write(tf_example.SerializeToString())
-        except:
-            pass
+        height, width = get_image_dimensions(annotation, images_dir)
+
+        pascal_voc_annotation_dict = parse_pascal_voc_annotation(annotation, class_map, height, width)
+        if not pascal_voc_annotation_dict:
+            continue
+
+        if len(pascal_voc_annotation_dict['classes']) > 100:
+            logging.error(f"too many classes ({len(pascal_voc_annotation_dict['classes'])}) on {annotation_xml}")
+            continue
+
+        # TODO ADD warning logs in the method open_image
+        # logging.warning(f'Could not open {annotation["filename"]} at {images_dir}')
+        raw_image, key = open_image(annotation, images_dir, pascal_voc_annotation_dict)
+
+        tf_example = build_example(annotation['filename'], images_dir, pascal_voc_annotation_dict, raw_image, key)
+        writer.write(tf_example.SerializeToString())
+
+        if use_dataset_augmentation:
+            tf_examples = augment_image(annotation, images_dir, pascal_voc_annotation_dict, class_map)
+            for tf_example in tf_examples:
+                writer.write(tf_example.SerializeToString())
 
     writer.close()
-    logging.info(f"Wrote {out_file}")
+    logging.info(f'Wrote {out_file}')
+
+
+def get_image_dimensions(annotation, images_dir):
+
+    img_path = os.path.join(
+        images_dir, annotation['filename'].replace('set_01', '').replace(".xml", ".jpg")
+    )
+
+    try:
+        width = int(annotation['size']['width'])
+        height = int(annotation['size']['height'])
+    except KeyError:
+        im = Image.open(img_path)
+        width, height = im.size
+    width = width if width > 0 else 416
+    height = height if height > 0 else 416
+
+    return height, width
+
+
+def parse_pascal_voc_annotation(annotation, class_map, height, width) -> DefaultDict:
+
+    pascal_voc_annotation_dict: DefaultDict = DefaultDict(list)
+
+    if 'object' in annotation:
+        for obj in annotation['object']:
+            if not obj['name'] in class_map:
+                logging.warning(f"weird name {obj['name']}")
+                return
+
+            if float(obj['bndbox']['xmin']) > width or float(obj['bndbox']['xmin']) < 0:
+                logging.warning(f"bad xmin {obj['bndbox']['xmin']}")
+                return
+
+            if float(obj['bndbox']['ymin']) > height or float(obj['bndbox']['ymin']) < 0:
+                logging.warning(f"bad ymin {obj['bndbox']['ymin']}")
+                return
+
+            if float(obj['bndbox']['xmax']) > width or float(obj['bndbox']['xmax']) < 0:
+                logging.warning(f"bad xmax {obj['bndbox']['xmax']}")
+                return
+
+            if float(obj['bndbox']['ymax']) > height or float(obj['bndbox']['ymax']) < 0:
+                logging.warning(f"bad ymax {obj['bndbox']['ymax']}")
+                return
+
+            difficult = bool(int(obj['difficult']))
+            xml_data_dict['difficult'].append(int(difficult))
+            xml_data_dict['xmin'].append(float(obj['bndbox']['xmin']) / width)
+            xml_data_dict['ymin'].append(float(obj['bndbox']['ymin']) / height)
+            xml_data_dict['xmax'].append(float(obj['bndbox']['xmax']) / width)
+            xml_data_dict['ymax'].append(float(obj['bndbox']['ymax']) / height)
+            xml_data_dict['classes_text'].append(obj['name'].encode('utf8'))
+            xml_data_dict['classes'].append(class_map[obj['name']])
+            xml_data_dict['height'].append(height)
+            xml_data_dict['width'].append(width)
+
+    return pascal_voc_annotation_dict
