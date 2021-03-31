@@ -155,7 +155,7 @@ def load_fake_dataset():
 
 def build_example(file_name, images_dir, xml_data_dict, bytes_image, key):
 
-    example = tf.train.Example(features=tf.train.Features(feature={
+    return tf.train.Example(features=tf.train.Features(feature={
         'image/height': tf.train.Feature(int64_list=tf.train.Int64List(value=xml_data_dict['height'])),
         'image/width': tf.train.Feature(int64_list=tf.train.Int64List(value=xml_data_dict['width'])),
         'image/filename': tf.train.Feature(bytes_list=tf.train.BytesList(value=[
@@ -165,15 +165,14 @@ def build_example(file_name, images_dir, xml_data_dict, bytes_image, key):
         'image/key/sha256': tf.train.Feature(bytes_list=tf.train.BytesList(value=[key.encode('utf8')])),
         'image/encoded': tf.train.Feature(bytes_list=tf.train.BytesList(value=[bytes_image])),
         'image/format': tf.train.Feature(bytes_list=tf.train.BytesList(value=['jpeg'.encode('utf8')])),
-        'image/object/bbox/xmin': tf.train.Feature(float_list=tf.train.FloatList(value=xmin)),
-        'image/object/bbox/xmax': tf.train.Feature(float_list=tf.train.FloatList(value=xmax)),
-        'image/object/bbox/ymin': tf.train.Feature(float_list=tf.train.FloatList(value=ymin)),
-        'image/object/bbox/ymax': tf.train.Feature(float_list=tf.train.FloatList(value=ymax)),
-        'image/object/class/text': tf.train.Feature(bytes_list=tf.train.BytesList(value=classes_text)),
-        'image/object/class/label': tf.train.Feature(int64_list=tf.train.Int64List(value=classes)),
-        'image/object/difficult': tf.train.Feature(int64_list=tf.train.Int64List(value=difficult_obj))
+        'image/object/bbox/xmin': tf.train.Feature(float_list=tf.train.FloatList(value=xml_data_dict['xmin'])),
+        'image/object/bbox/xmax': tf.train.Feature(float_list=tf.train.FloatList(value=xml_data_dict['xmax'])),
+        'image/object/bbox/ymin': tf.train.Feature(float_list=tf.train.FloatList(value=xml_data_dict['ymin'])),
+        'image/object/bbox/ymax': tf.train.Feature(float_list=tf.train.FloatList(value=xml_data_dict['ymax'])),
+        'image/object/class/text': tf.train.Feature(bytes_list=tf.train.BytesList(value=xml_data_dict['classes_text'])),
+        'image/object/class/label': tf.train.Feature(int64_list=tf.train.Int64List(value=xml_data_dict['classes'])),
+        'image/object/difficult': tf.train.Feature(int64_list=tf.train.Int64List(value=xml_data_dict['difficult']))
     }))
-    return example
 
 
 def parse_xml(xml):
@@ -206,6 +205,8 @@ def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augm
         height, width = get_image_dimensions(annotation, images_dir)
         pascal_voc_dict = parse_pascal_voc(annotation, class_map, height, width)
 
+        pascal_voc_annotation_dict = parse_pascal_voc(annotation, class_map, height, width)
+
         if not pascal_voc_annotation_dict:
             continue            
 
@@ -213,7 +214,7 @@ def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augm
             logging.error(f"too many classes ({len(pascal_voc_dict['classes'])}) on {annotation_xml}")
             continue
 
-        raw_image, key = open_image(annotation, images_dir, pascal_voc_annotation_dict)
+        raw_image, key = open_image(annotation, images_dir)
         if not raw_image:
             continue
 
@@ -284,7 +285,7 @@ def parse_pascal_voc(annotation, class_map, height, width) -> DefaultDict:
             pascal_voc_dict['height'].append(height)
             pascal_voc_dict['width'].append(width)
 
-    return pascal_voc_annotation_dict
+    return pascal_voc_dict
 
 
 def open_image(annotation, images_dir):

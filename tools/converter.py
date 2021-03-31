@@ -16,7 +16,7 @@ flags.DEFINE_string('output_train_file', './data/set_03_train.tfrecord', 'output
 flags.DEFINE_string('output_val_file', './data/set_03_val.tfrecord', 'output validation tfrecord')
 flags.DEFINE_string('classes', './data/person-det.names', 'classes file')
 
-flags.DEFINE_bool('data_augmentation', False,
+flags.DEFINE_bool('use_data_augmentation', False,
                   'Weather or not to increase the train dataset with image augmentation')
 
 
@@ -30,7 +30,7 @@ def main(_argv):
         FLAGS.output_train_file,
         FLAGS.train_labels_dir,
         FLAGS.train_data_dir,
-        FLAGS.data_augmentation
+        FLAGS.use_data_augmentation
     )
     parse_set(
         class_map,
