@@ -293,18 +293,19 @@ def open_image(annotation, images_dir):
     img_path = os.path.join(
         images_dir, annotation['filename'].replace('set_01', '').replace(".xml", ".jpg")
     )
+
     try:
         raw_image = open(img_path, 'rb').read()
     except:
         logging.warning(f'Could not open {annotation["filename"]} at {images_dir}')
-        return
+        return None, None
 
     key = hashlib.sha256(raw_image).hexdigest()
 
     if raw_image[0] != 255 and raw_image[0] != 137:
         logging.warning(f"raw {raw_image[0]}")
         logging.warning(f"bad image {img_path}")
-        return
+        return None, None
     
     return raw_image, key
 
