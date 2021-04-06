@@ -194,8 +194,10 @@ def parse_xml(xml):
 def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augmentation):
 
     writer = tf.io.TFRecordWriter(out_file)
+    augmentation_list = get_default_augmentation_pipeline()
 
     for annotation_file in tqdm.tqdm(os.listdir(annotations_dir)):
+
         if not annotation_file.endswith('.xml'):
             continue
 
@@ -229,7 +231,8 @@ def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augm
             image = cv2.imdecode(np_image, cv2.IMREAD_COLOR)
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-            tf_examples = augment_image(images_dir, pascal_voc_dict, class_map, image)
+            tf_examples = augment_image(images_dir, pascal_voc_dict, class_map, image, augmentation_list)
+
             for tf_example in tf_examples:
                 writer.write(tf_example.SerializeToString())
 
@@ -317,16 +320,14 @@ def open_image(annotation, images_dir):
     return raw_image, key
 
 
-def augment_image(images_dir, xml_data_dict, class_map, image):
+def augment_image(images_dir, xml_data_dict, class_map, image, augmentation_list):
 
     build_examples: list = []
 
     bounding_boxes = get_bounding_boxes(xml_data_dict)
-    transformations, aug_names = get_default_augmentation_pipeline()
     image_name = xml_data_dict['filename'].replace('set_01', '').replace(".xml", ".jpg")
 
-    for transform, aug_name in zip(transformations, aug_names):
-
+    for (transform, aug_name) in augmentation_list:
         aug_image = transform(image=image, bboxes=bounding_boxes)
 
         encoded_image = cv2.imencode('.jpg', cv2.cvtColor(aug_image['image'], cv2.COLOR_RGB2BGR))[1].tostring()
@@ -437,4 +438,4 @@ def get_default_augmentation_pipeline() -> list:
         'Blur', 'HorizontalFlip', 'Contrast', 'Sepia', 'GaussNoise'
     ]
 
-    return transformations, aug_names
+    return list(zip(transformations, aug_names))
