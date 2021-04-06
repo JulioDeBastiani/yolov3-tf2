@@ -154,15 +154,15 @@ def load_fake_dataset():
     return tf.data.Dataset.from_tensor_slices((x_train, y_train))
 
 
-def build_example(file_name, images_dir, xml_data_dict, bytes_image, key):
+def build_example(images_dir, xml_data_dict, bytes_image, key):
 
     return tf.train.Example(features=tf.train.Features(feature={
         'image/height': tf.train.Feature(int64_list=tf.train.Int64List(value=xml_data_dict['height'])),
         'image/width': tf.train.Feature(int64_list=tf.train.Int64List(value=xml_data_dict['width'])),
         'image/filename': tf.train.Feature(bytes_list=tf.train.BytesList(value=[
-            file_name.encode('utf8')])),
+            xml_data_dict['filename'].encode('utf8')])),
         'image/source_id': tf.train.Feature(bytes_list=tf.train.BytesList(value=[
-           file_name.encode('utf8')])),
+           xml_data_dict['filename'].encode('utf8')])),
         'image/key/sha256': tf.train.Feature(bytes_list=tf.train.BytesList(value=[key.encode('utf8')])),
         'image/encoded': tf.train.Feature(bytes_list=tf.train.BytesList(value=[bytes_image])),
         'image/format': tf.train.Feature(bytes_list=tf.train.BytesList(value=['jpeg'.encode('utf8')])),
@@ -218,8 +218,9 @@ def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augm
         raw_image, key = open_image(annotation, images_dir)
         if not raw_image:
             continue
-
-        tf_example = build_example(annotation['filename'], images_dir, pascal_voc_dict, raw_image, key)
+        
+        pascal_voc_dict['filename'] = annotation['filename']
+        tf_example = build_example(images_dir, pascal_voc_dict, raw_image, key)
         writer.write(tf_example.SerializeToString())
 
         if use_dataset_augmentation:
@@ -228,9 +229,7 @@ def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augm
             image = cv2.imdecode(np_image, cv2.IMREAD_COLOR)
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-            img_name = annotation['filename'].replace('set_01', '').replace(".xml", ".jpg")
-
-            tf_examples = augment_image(img_name, images_dir, pascal_voc_dict, class_map, image)
+            tf_examples = augment_image(images_dir, pascal_voc_dict, class_map, image)
             for tf_example in tf_examples:
                 writer.write(tf_example.SerializeToString())
 
@@ -318,12 +317,13 @@ def open_image(annotation, images_dir):
     return raw_image, key
 
 
-def augment_image(image_name, images_dir, xml_data_dict, class_map, image):
+def augment_image(images_dir, xml_data_dict, class_map, image):
 
     build_examples: list = []
 
     bounding_boxes = get_bounding_boxes(xml_data_dict)
     transformations, aug_names = get_default_augmentation_pipeline()
+    image_name = xml_data_dict['filename'].replace('set_01', '').replace(".xml", ".jpg")
 
     for transform, aug_name in zip(transformations, aug_names):
 
@@ -335,7 +335,8 @@ def augment_image(image_name, images_dir, xml_data_dict, class_map, image):
         file_name = image_name.replace('.jpg', f'--{aug_name}.jpg')
 
         image_dict = build_augmented_image_dict(aug_image, xml_data_dict, class_map)
-        build_examples.append(build_example(file_name, images_dir, image_dict, encoded_image, key))
+        image_dict['filename'] = file_name
+        build_examples.append(build_example(images_dir, image_dict, encoded_image, key))
 
     return build_examples
 
