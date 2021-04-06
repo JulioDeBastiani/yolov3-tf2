@@ -391,7 +391,7 @@ def parse_bounding_boxes(xml_data_dict: dict) -> list:
     return bounding_boxes
 
 
-def get_default_augmentation_pipeline() -> list:
+def build_default_augmentation_pipeline() -> list:
 
     # p is probability we set it allways to be 1 as for now we don't want randomness here
     # albumentations uses the random python lib to set it's seed.
