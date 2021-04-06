@@ -231,7 +231,7 @@ def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augm
             image = cv2.imdecode(np_image, cv2.IMREAD_COLOR)
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-            tf_examples = augment_image(images_dir, pascal_voc_dict, class_map, image, augmentation_list)
+            tf_examples = augment_image(images_dir, pascal_voc_dict, image, augmentation_list)
 
             for tf_example in tf_examples:
                 writer.write(tf_example.SerializeToString())
@@ -320,7 +320,7 @@ def open_image(annotation, images_dir):
     return raw_image, key
 
 
-def augment_image(images_dir, xml_data_dict, class_map, image, augmentation_list):
+def augment_image(images_dir, xml_data_dict, image, augmentation_list):
 
     build_examples: list = []
 
@@ -335,16 +335,16 @@ def augment_image(images_dir, xml_data_dict, class_map, image, augmentation_list
         key = hashlib.sha256(encoded_image).hexdigest()
         file_name = image_name.replace('.jpg', f'--{aug_name}.jpg')
 
-        image_dict = build_augmented_image_dict(aug_image, xml_data_dict, class_map)
+        image_dict = build_augmented_image_dict(aug_image, xml_data_dict)
         image_dict['filename'] = file_name
         build_examples.append(build_example(images_dir, image_dict, encoded_image, key))
 
     return build_examples
 
 
-def build_augmented_image_dict(aug_image, xml_data_dict, class_map):
+def build_augmented_image_dict(aug_image, xml_data_dict):
 
-    bbox_dict = get_bbox_dict(aug_image['bboxes'], class_map)
+    bbox_dict = get_bbox_dict(aug_image['bboxes'])
 
     augmented_image_dict: DefaultDict = DefaultDict(list)
 
@@ -361,7 +361,7 @@ def build_augmented_image_dict(aug_image, xml_data_dict, class_map):
     return augmented_image_dict
 
 
-def get_bbox_dict(bbox_list, class_map) -> dict:
+def get_bbox_dict(bbox_list) -> dict:
 
     bbox_dict: DefaultDict = DefaultDict(list)
 
