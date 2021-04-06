@@ -375,7 +375,7 @@ def get_bbox_dict(bbox_list) -> dict:
     return bbox_dict
 
 
-def get_bounding_boxes(xml_data_dict: dict) -> list:
+def parse_bounding_boxes(xml_data_dict: dict) -> list:
     
     bounding_boxes: list = []
 
