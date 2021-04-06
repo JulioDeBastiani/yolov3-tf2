@@ -154,7 +154,7 @@ def load_fake_dataset():
     return tf.data.Dataset.from_tensor_slices((x_train, y_train))
 
 
-def build_example(images_dir, xml_data_dict, bytes_image, key):
+def build_example(xml_data_dict, bytes_image, key):
 
     return tf.train.Example(features=tf.train.Features(feature={
         'image/height': tf.train.Feature(int64_list=tf.train.Int64List(value=xml_data_dict['height'])),
@@ -222,7 +222,7 @@ def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augm
             continue
         
         pascal_voc_dict['filename'] = annotation['filename']
-        tf_example = build_example(images_dir, pascal_voc_dict, raw_image, key)
+        tf_example = build_example(pascal_voc_dict, raw_image, key)
         writer.write(tf_example.SerializeToString())
 
         if use_dataset_augmentation:
@@ -337,7 +337,7 @@ def augment_image(images_dir, xml_data_dict, image, augmentation_list):
 
         image_dict = build_augmented_image_dict(aug_image, xml_data_dict)
         image_dict['filename'] = file_name
-        build_examples.append(build_example(images_dir, image_dict, encoded_image, key))
+        build_examples.append(build_example(image_dict, encoded_image, key))
 
     return build_examples
 
