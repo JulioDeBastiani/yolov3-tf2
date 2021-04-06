@@ -9,6 +9,7 @@ import lxml.etree
 import tqdm
 import cv2
 from typing import DefaultDict
+import numpy as np
 
 @tf.function
 def transform_targets_for_output(y_true, grid_size, anchor_idxs):
@@ -222,7 +223,14 @@ def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augm
         writer.write(tf_example.SerializeToString())
 
         if use_dataset_augmentation:
-            tf_examples = augment_image(annotation, images_dir, pascal_voc_dict, class_map)
+
+            np_image = np.fromstring(raw_image, np.uint8)
+            image = cv2.imdecode(np_image, cv2.IMREAD_COLOR)
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+            img_name = annotation['filename'].replace('set_01', '').replace(".xml", ".jpg")
+
+            tf_examples = augment_image(img_name, images_dir, pascal_voc_dict, class_map, image)
             for tf_example in tf_examples:
                 writer.write(tf_example.SerializeToString())
 
@@ -306,19 +314,13 @@ def open_image(annotation, images_dir):
         logging.warning(f"raw {raw_image[0]}")
         logging.warning(f"bad image {img_path}")
         return None, None
-    
+
     return raw_image, key
 
 
-def augment_image(annotation, images_dir, xml_data_dict, class_map):
+def augment_image(image_name, images_dir, xml_data_dict, class_map, image):
 
     build_examples: list = []
-    img_path = os.path.join(
-        images_dir, annotation['filename'].replace('set_01', '').replace(".xml", ".jpg")
-    )
-
-    image = cv2.imread(img_path)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
     bounding_boxes = get_bounding_boxes(xml_data_dict)
     transformations, aug_names = get_default_augmentation_pipeline()
@@ -327,13 +329,13 @@ def augment_image(annotation, images_dir, xml_data_dict, class_map):
 
         aug_image = transform(image=image, bboxes=bounding_boxes)
 
-        a = cv2.imencode('.jpg', cv2.cvtColor(aug_image['image'], cv2.COLOR_RGB2BGR))[1].tostring()
+        encoded_image = cv2.imencode('.jpg', cv2.cvtColor(aug_image['image'], cv2.COLOR_RGB2BGR))[1].tostring()
 
-        key = hashlib.sha256(a).hexdigest()
-        file_name = annotation['filename'].replace('.jpg', f'--{aug_name}.jpg')
+        key = hashlib.sha256(encoded_image).hexdigest()
+        file_name = image_name.replace('.jpg', f'--{aug_name}.jpg')
 
         image_dict = build_augmented_image_dict(aug_image, xml_data_dict, class_map)
-        build_examples.append(build_example(file_name, images_dir, image_dict, a, key))
+        build_examples.append(build_example(file_name, images_dir, image_dict, encoded_image, key))
 
     return build_examples
 
