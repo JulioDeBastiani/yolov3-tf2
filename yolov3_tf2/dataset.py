@@ -194,7 +194,7 @@ def parse_xml(xml):
 def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augmentation):
 
     writer = tf.io.TFRecordWriter(out_file)
-    augmentation_list = get_default_augmentation_pipeline()
+    augmentation_list = build_default_augmentation_pipeline()
 
     for annotation_file in tqdm.tqdm(os.listdir(annotations_dir)):
 
