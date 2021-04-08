@@ -220,8 +220,7 @@ def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augm
         raw_image, key = open_image(annotation, images_dir)
         if not raw_image:
             continue
-        
-        pascal_voc_dict['filename'] = annotation['filename']
+
         tf_example = build_example(pascal_voc_dict, raw_image, key)
         writer.write(tf_example.SerializeToString())
 
@@ -261,6 +260,7 @@ def get_image_dimensions(annotation, images_dir):
 def parse_pascal_voc(annotation, class_map, height, width) -> DefaultDict:
 
     pascal_voc_dict: DefaultDict = DefaultDict(list)
+    pascal_voc_dict['filename'] = annotation['filename']
 
     if 'object' in annotation:
         for obj in annotation['object']:
@@ -324,7 +324,7 @@ def augment_image(images_dir, xml_data_dict, image, augmentation_list):
 
     build_examples: list = []
 
-    bounding_boxes = get_bounding_boxes(xml_data_dict)
+    bounding_boxes = parse_bounding_boxes(xml_data_dict)
     image_name = xml_data_dict['filename'].replace('set_01', '').replace(".xml", ".jpg")
 
     for (transform, aug_name) in augmentation_list:
