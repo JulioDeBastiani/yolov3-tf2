@@ -59,6 +59,8 @@ flags.DEFINE_enum('transfer', 'fine_tune',
                   'frozen: Transfer and freeze all, '
                   'fine_tune: Transfer all and freeze darknet only')
 
+flags.DEFINE_boolean('use_early_stopping', False,
+                     'Chooses if using early stopping or not')
 flags.DEFINE_boolean('use_data_augmentation', False,
                      'Chooses if using data augmentation or not')
 flags.DEFINE_boolean('tiny', False,
@@ -215,11 +217,12 @@ def main(_argv):
 
         callbacks = [
             ReduceLROnPlateau(verbose=1),
-            #EarlyStopping(patience=3, verbose=1),
             ModelCheckpoint(FLAGS.checkpoints + '/yolov3_train_{epoch}.tf',
                             verbose=1, save_weights_only=True),
             TensorBoard(log_dir='logs')
         ]
+        if FLAGS.use_early_stopping:
+            callbacks.append(EarlyStopping(patience=3, verbose=1))
 
         history = model.fit(train_dataset,
                             epochs=FLAGS.epochs,
