@@ -1,14 +1,3 @@
-*.h5
-*.weights
-*.tar
-*.tfrecord
-/checkpoints/*
-/serving/*
-/logs/
-/Untitled.ipynb
-/output.jpg
-/data/voc2012_raw/
-
 # Created by https://www.gitignore.io/api/python
 # Edit at https://www.gitignore.io/?templates=python
 
@@ -136,5 +125,18 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Repository ignores
+*.h5
+*.weights
+*.tar
+*.tfrecord
+/checkpoints/*
+/serving/*
+/logs/
+/Untitled.ipynb
+/output.jpg
+/data/voc2012_raw/
+out/* 
 
 # End of https://www.gitignore.io/api/python

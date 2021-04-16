@@ -1,14 +1,21 @@
-import tensorflow as tf
-import PIL
-import cv2
-import numpy as np
 from absl import app, flags, logging
 from absl.flags import FLAGS
 from tqdm import tqdm
+import cv2
+import os
 
 from yolov3_tf2.dataset import transform_images, load_tfrecord_dataset
 
-flags.DEFINE_string('tfrecord_path', None, 'Path to the tfrecord to load and test')
+flags.DEFINE_string('tfrecord_path', None, 
+                    'Path to the tfrecord to load and test')
+flags.DEFINE_string('output', './out', 
+                    'The folder for the images output.')
+
+flags.DEFINE_integer('max_yolo_boxes', 100, 
+                    'The max limit of the box possible on yolo output.')
+
+flags.DEFINE_enum('mode', 'person', 
+                  ['face', 'person'], 'which neural network to train.')
 
 flags.mark_flag_as_required('tfrecord_path')
 
@@ -16,9 +23,11 @@ flags.mark_flag_as_required('tfrecord_path')
 def main(argv) -> None:
 
     del argv
-    dataset = load_tfrecord_dataset(FLAGS.tfrecord_path,'./data/coco.names', 416)
+    dataset = load_tfrecord_dataset(FLAGS.tfrecord_path,f'./data/{FLAGS.mode}-det.names', 416, FLAGS.max_yolo_boxes)
+    os.makedirs(FLAGS.output, exist_ok=True)
     i = 0
-    for instance in dataset:
+
+    for instance in tqdm(dataset):
     
         img = cv2.cvtColor(instance[0].numpy(), cv2.COLOR_RGB2BGR)
 
@@ -34,7 +43,7 @@ def main(argv) -> None:
                 2
             ) 
 
-        cv2.imwrite(f'./data/take_{i}.jpg', img)
+        cv2.imwrite(f'{FLAGS.output}/take_{i}.jpg', img)
         i+=1
 
 if __name__ == '__main__' :

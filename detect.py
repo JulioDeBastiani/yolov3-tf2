@@ -4,21 +4,31 @@ from absl.flags import FLAGS
 import cv2
 import numpy as np
 import tensorflow as tf
-from yolov3_tf2.models import (
-    YoloV3, YoloV3Tiny
-)
+
+from yolov3_tf2.models import YoloV3, YoloV3Tiny
 from yolov3_tf2.dataset import transform_images, load_tfrecord_dataset
 from yolov3_tf2.utils import draw_outputs
 
-flags.DEFINE_string('classes', './data/coco.names', 'path to classes file')
+flags.DEFINE_string('classes', './data/coco.names',
+                    'path to classes file')
 flags.DEFINE_string('weights', './checkpoints/yolov3.tf',
                     'path to weights file')
-flags.DEFINE_boolean('tiny', False, 'yolov3 or yolov3-tiny')
-flags.DEFINE_integer('size', 416, 'resize images to')
-flags.DEFINE_string('image', './data/girl.png', 'path to input image')
-flags.DEFINE_string('tfrecord', None, 'tfrecord instead of image')
-flags.DEFINE_string('output', './output.jpg', 'path to output image')
-flags.DEFINE_integer('num_classes', 80, 'number of classes in the model')
+flags.DEFINE_string('image', './data/girl.png',
+                    'path to input image')
+flags.DEFINE_string('tfrecord', None,
+                    'tfrecord instead of image')
+flags.DEFINE_string('output', './output.jpg',
+                    'path to output image')
+
+flags.DEFINE_integer('size', 416,
+                     'resize images to')
+flags.DEFINE_integer('num_classes', 80,
+                     'number of classes in the model')
+flags.DEFINE_integer('max_yolo_boxes', 100,
+                     'The max quanttity of boxes for the yolo model')
+
+flags.DEFINE_boolean('tiny', False,
+                     'yolov3 or yolov3-tiny')
 
 
 def main(_argv):
@@ -39,7 +49,7 @@ def main(_argv):
 
     if FLAGS.tfrecord:
         dataset = load_tfrecord_dataset(
-            FLAGS.tfrecord, FLAGS.classes, FLAGS.size)
+            FLAGS.tfrecord, FLAGS.classes, FLAGS.size, FLAGS.max_yolo_boxes)
         dataset = dataset.shuffle(512)
         img_raw, _label = next(iter(dataset.take(1)))
     else:

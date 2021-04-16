@@ -1,8 +1,7 @@
 import tensorflow as tf
 from absl import app, flags, logging
 from absl.flags import FLAGS
-from PIL import Image
-import time
+import albumentations as A
 import random
 import os
 from io import BytesIO
@@ -10,11 +9,8 @@ import hashlib
 import lxml.etree
 import tqdm
 import cv2
-import albumentations as A
 from typing import DefaultDict
 import numpy as np
-from tensorflow.keras.utils import Sequence
-TIMES = 0 # TEST
 
 @tf.function
 def transform_targets_for_output(y_true, grid_size, anchor_idxs):
@@ -114,7 +110,7 @@ IMAGE_FEATURE_MAP = {
 }
 
 
-def parse_tfrecord(tfrecord, class_table, size):
+def parse_tfrecord(tfrecord, class_table, size, max_yolo_boxes):
     x = tf.io.parse_single_example(tfrecord, IMAGE_FEATURE_MAP)
     x_train = tf.image.decode_jpeg(x['image/encoded'], channels=3)
 
@@ -133,12 +129,12 @@ def parse_tfrecord(tfrecord, class_table, size):
     ], axis=1)
 
     # it used a flag to set it the max boxes possible
-    y_train = add_pads_to_tensor(y_train, 100)
+    y_train = add_pads_to_tensor(y_train, max_yolo_boxes)
 
     return x_train, y_train
 
 
-def load_tfrecord_dataset(file_pattern, class_file, size=416):
+def load_tfrecord_dataset(file_pattern, class_file, size, max_yolo_boxes):
     LINE_NUMBER = -1  # TODO: use tf.lookup.TextFileIndex.LINE_NUMBER
     class_table = tf.lookup.StaticHashTable(tf.lookup.TextFileInitializer(
         class_file, tf.string, 0, tf.int64, LINE_NUMBER, delimiter="\n"), -1)
@@ -146,7 +142,7 @@ def load_tfrecord_dataset(file_pattern, class_file, size=416):
     files = tf.data.Dataset.list_files(file_pattern)
     dataset = files.flat_map(tf.data.TFRecordDataset)
 
-    return dataset.map(lambda x: parse_tfrecord(x, class_table, size))
+    return dataset.map(lambda x: parse_tfrecord(x, class_table, size, max_yolo_boxes))
 
 
 def load_fake_dataset():
@@ -165,51 +161,17 @@ def load_fake_dataset():
     return tf.data.Dataset.from_tensor_slices((x_train, y_train))
 
 
-# TODO change the size of objects in tfrecord
-def build_example(file_name, images_dir, xml_data_dict, bytes_image, key):
+def get_directory_xml_files(directory_path, img_format):
 
-    example = tf.train.Example(features=tf.train.Features(feature={
-        'image/height': tf.train.Feature(int64_list=tf.train.Int64List(value=xml_data_dict['height'])),
-        'image/width': tf.train.Feature(int64_list=tf.train.Int64List(value=xml_data_dict['width'])),
-        'image/filename': tf.train.Feature(bytes_list=tf.train.BytesList(value=[
-            file_name.encode('utf8')])),
-        'image/source_id': tf.train.Feature(bytes_list=tf.train.BytesList(value=[
-           file_name.encode('utf8')])),
-        'image/key/sha256': tf.train.Feature(bytes_list=tf.train.BytesList(value=[key.encode('utf8')])),
-        'image/encoded': tf.train.Feature(bytes_list=tf.train.BytesList(value=[bytes_image])),
-        'image/format': tf.train.Feature(bytes_list=tf.train.BytesList(value=['jpeg'.encode('utf8')])),
-        'image/object/bbox/xmin': tf.train.Feature(float_list=tf.train.FloatList(value=xml_data_dict['xmin'])),
-        'image/object/bbox/xmax': tf.train.Feature(float_list=tf.train.FloatList(value=xml_data_dict['xmax'])),
-        'image/object/bbox/ymin': tf.train.Feature(float_list=tf.train.FloatList(value=xml_data_dict['ymin'])),
-        'image/object/bbox/ymax': tf.train.Feature(float_list=tf.train.FloatList(value=xml_data_dict['ymax'])),
-        'image/object/class/text': tf.train.Feature(bytes_list=tf.train.BytesList(value=xml_data_dict['classes_text'])),
-        'image/object/class/label': tf.train.Feature(int64_list=tf.train.Int64List(value=xml_data_dict['classes'])),
-        'image/object/difficult': tf.train.Feature(int64_list=tf.train.Int64List(value=xml_data_dict['difficult'])),
-        'image/object/truncated': tf.train.Feature(int64_list=tf.train.Int64List(value=xml_data_dict['truncated'])),
-        'image/object/view': tf.train.Feature(bytes_list=tf.train.BytesList(value=xml_data_dict['views']))
-    }))
-    return example
+    set_files: list = []
 
+    for _, _, files in os.walk(directory_path, topdown=False):
+        for file in files:
+            if file.split('.')[1] == 'xml':
+                if os.path.isfile(os.path.join(directory_path, f'{file.split(".")[0]}.{img_format}')):
+                    set_files.append(file)
 
-def get_image_dimensions(annotation, images_dir):
-
-    img_path = os.path.join(
-        images_dir, annotation['filename'].replace('set_01', '').replace(".xml", ".jpg")
-    )
-
-    try:
-        width = int(annotation['size']['width'])
-        height = int(annotation['size']['height'])
-    except KeyError:
-        im = Image.open(img_path)
-        width, height = im.size
-
-    width = width if width > 0 else 416
-    height = height if height > 0 else 416
-
-    return height, width
-
-
+    return set_files
 def parse_xml(xml):
     if not len(xml):
         return {xml.tag: xml.text}
@@ -223,170 +185,26 @@ def parse_xml(xml):
                 result[child.tag] = []
             result[child.tag].append(child_result[child.tag])
     return {xml.tag: result}
+def build_example(xml_data_dict, bytes_image, key):
 
-
-def augment_image(annotation, images_dir, xml_data_dict, class_map):
-
-    build_examples: list = []
-    img_path = os.path.join(
-        images_dir, annotation['filename'].replace('set_01', '').replace(".xml", ".jpg")
-    )
-
-    image = cv2.imread(img_path)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
-    bounding_boxes = get_bounding_boxes(xml_data_dict)
-    transformations, aug_names = get_default_augmentation_pipeline()
-
-    for transform, aug_name in zip(transformations, aug_names):
-
-        aug_image = transform(image=image, bboxes=bounding_boxes)
-
-        a = cv2.imencode('.jpg', cv2.cvtColor(aug_image['image'], cv2.COLOR_RGB2BGR))[1].tostring()
- 
-        key = hashlib.sha256(a).hexdigest()
-        file_name = annotation['filename'].replace('.jpg', f'--{aug_name}.jpg')
-        
-
-        image_dict = build_augmented_image_dict(aug_image, xml_data_dict, class_map)
-        build_examples.append(build_example(file_name, images_dir, image_dict, a, key))
-
-    return build_examples
-
-
-def build_augmented_image_dict(aug_image, xml_data_dict, class_map):
-
-    bbox_dict = get_bbox_dict(aug_image['bboxes'], class_map)
-
-    augmented_image_dict: DefaultDict = DefaultDict(list)
-
-    augmented_image_dict['height'].append(aug_image['image'].shape[0])
-    augmented_image_dict['width'].append(aug_image['image'].shape[1])
-    augmented_image_dict['truncated'] = xml_data_dict['truncated']
-    augmented_image_dict['views'] = xml_data_dict['views']
-    augmented_image_dict['difficult'] = xml_data_dict['difficult']
-    augmented_image_dict['classes_text'] = xml_data_dict['classes_text']
-
-    # Union both dicts
-    augmented_image_dict = {**augmented_image_dict, **bbox_dict}
-
-    return augmented_image_dict
-
-
-def get_bbox_dict(bbox_list, class_map) -> dict:
-
-    bbox_dict: DefaultDict = DefaultDict(list)
-
-    for bbox in bbox_list:
-        bbox_dict['xmin'].append(bbox[0])
-        bbox_dict['ymin'].append(bbox[1])
-        bbox_dict['xmax'].append(bbox[2])
-        bbox_dict['ymax'].append(bbox[3])
-        bbox_dict['classes'].append(class_map[bbox[4]])
-    
-    return bbox_dict
-
-
-def parse_set(class_map, out_file, annotations_dir, images_dir, aumentation):
-    writer = tf.io.TFRecordWriter(out_file)
-    
-    for annotation_file in tqdm.tqdm(os.listdir(annotations_dir)):
-        if not annotation_file.endswith('.xml'):
-            continue
-        
-        annotation_xml = os.path.join(annotations_dir, annotation_file)
-        annotation_xml = lxml.etree.fromstring(open(annotation_xml).read())
-        annotation = parse_xml(annotation_xml)['annotation']
-
-        height, width = get_image_dimensions(annotation, images_dir)
-        try:
-            xml_data_dict = extract_xml_data(annotation, class_map, height, width)
-        except Exception:
-            continue
-    
-        if len(xml_data_dict['classes']) > 100:
-            logging.error(f"too many classes ({len(xml_data_dict['classes'])}) on {annotation_xml}")
-            continue
-
-        try:
-            raw_image, key = open_image(annotation, images_dir, xml_data_dict)
-        except:
-            continue
-
-        tf_example = build_example(annotation['filename'], images_dir, xml_data_dict, raw_image, key)
-        writer.write(tf_example.SerializeToString())
-
-        if aumentation:
-            tf_examples = augment_image(annotation, images_dir, xml_data_dict, class_map)
-            for tf_example in tf_examples:
-                writer.write(tf_example.SerializeToString())
-
-    writer.close()
-    logging.info(f"Wrote {out_file}")
-
-
-def get_directory_xml_files(directory_path, img_format):
-
-    set_files: list = []
-
-    for _, _, files in os.walk(directory_path, topdown=False):
-        for file in files:
-            if file.split('.')[1] == 'xml':
-                if os.path.isfile(os.path.join(directory_path, f'{file.split(".")[0]}.{img_format}')):
-                    set_files.append(file)
-
-    return set_files
-
-
-def extract_xml_data(annotation, class_map, height, width) -> DefaultDict:
-
-    xml_data_dict: DefaultDict = DefaultDict(list)
-
-    if 'object' in annotation:
-        for obj in annotation['object']:
-            if not obj['name'] in class_map:
-                logging.warning(f"weird name {obj['name']}")
-                raise Exception
-
-            if float(obj['bndbox']['xmin']) > width or float(obj['bndbox']['xmin']) < 0:
-                logging.warning(f"bad xmin {obj['bndbox']['xmin']}")
-                raise Exception
-
-            if float(obj['bndbox']['ymin']) > height or float(obj['bndbox']['ymin']) < 0:
-                logging.warning(f"bad ymin {obj['bndbox']['ymin']}")
-                raise Exception
-
-            if float(obj['bndbox']['xmax']) > width or float(obj['bndbox']['xmax']) < 0:
-                logging.warning(f"bad xmax {obj['bndbox']['xmax']}")
-                raise Exception
-
-            if float(obj['bndbox']['ymax']) > height or float(obj['bndbox']['ymax']) < 0:
-                logging.warning(f"bad ymax {obj['bndbox']['ymax']}")
-                raise Exception
-
-            difficult = bool(int(obj['difficult']))
-            xml_data_dict['difficult'].append(int(difficult))
-            xml_data_dict['xmin'].append(float(obj['bndbox']['xmin']) / width)
-            xml_data_dict['ymin'].append(float(obj['bndbox']['ymin']) / height)
-            xml_data_dict['xmax'].append(float(obj['bndbox']['xmax']) / width)
-            xml_data_dict['ymax'].append(float(obj['bndbox']['ymax']) / height)
-            xml_data_dict['classes_text'].append(obj['name'].encode('utf8'))
-            xml_data_dict['classes'].append(class_map[obj['name']])
-            xml_data_dict['height'].append(height)
-            xml_data_dict['width'].append(width)
-
-            try:
-                xml_data_dict['truncated'].append(int(obj['truncated']))
-            except:
-                pass
-
-            try:
-                xml_data_dict['views'].append(obj['pose'].encode('utf8'))
-            except:
-                pass
-
-    return xml_data_dict
-
+    return tf.train.Example(features=tf.train.Features(feature={
+        'image/height': tf.train.Feature(int64_list=tf.train.Int64List(value=xml_data_dict['height'])),
+        'image/width': tf.train.Feature(int64_list=tf.train.Int64List(value=xml_data_dict['width'])),
+        'image/filename': tf.train.Feature(bytes_list=tf.train.BytesList(value=[
+            xml_data_dict['filename'].encode('utf8')])),
+        'image/source_id': tf.train.Feature(bytes_list=tf.train.BytesList(value=[
+           xml_data_dict['filename'].encode('utf8')])),
+        'image/key/sha256': tf.train.Feature(bytes_list=tf.train.BytesList(value=[key.encode('utf8')])),
+        'image/encoded': tf.train.Feature(bytes_list=tf.train.BytesList(value=[bytes_image])),
+        'image/format': tf.train.Feature(bytes_list=tf.train.BytesList(value=['jpeg'.encode('utf8')])),
+        'image/object/bbox/xmin': tf.train.Feature(float_list=tf.train.FloatList(value=xml_data_dict['xmin'])),
+        'image/object/bbox/xmax': tf.train.Feature(float_list=tf.train.FloatList(value=xml_data_dict['xmax'])),
+        'image/object/bbox/ymin': tf.train.Feature(float_list=tf.train.FloatList(value=xml_data_dict['ymin'])),
+        'image/object/bbox/ymax': tf.train.Feature(float_list=tf.train.FloatList(value=xml_data_dict['ymax'])),
+        'image/object/class/text': tf.train.Feature(bytes_list=tf.train.BytesList(value=xml_data_dict['classes_text'])),
+        'image/object/class/label': tf.train.Feature(int64_list=tf.train.Int64List(value=xml_data_dict['classes'])),
+        'image/object/difficult': tf.train.Feature(int64_list=tf.train.Int64List(value=xml_data_dict['difficult']))
+    }))
 
 def open_image(annotation, images_dir, xml_data_dict):
 
@@ -606,3 +424,252 @@ def add_pads_to_tensor(tensor, pad_size):
 
     paddings = [[0, pad_size - tf.shape(tensor)[0]], [0, 0]]
     return tf.pad(tensor, paddings)
+
+def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augmentation):
+
+    writer = tf.io.TFRecordWriter(out_file)
+    augmentation_list = build_default_augmentation_pipeline()
+
+    for annotation_file in tqdm.tqdm(os.listdir(annotations_dir)):
+
+        if not annotation_file.endswith('.xml'):
+            continue
+
+        annotation_xml = os.path.join(annotations_dir, annotation_file)
+        annotation_xml = lxml.etree.fromstring(open(annotation_xml).read())
+        annotation = parse_xml(annotation_xml)['annotation']
+
+        height, width = get_image_dimensions(annotation, images_dir)
+        pascal_voc_dict = parse_pascal_voc(annotation, class_map, height, width)
+
+        pascal_voc_annotation_dict = parse_pascal_voc(annotation, class_map, height, width)
+
+        if not pascal_voc_annotation_dict:
+            continue            
+
+        if len(pascal_voc_dict['classes']) > 100:
+            logging.error(f"too many classes ({len(pascal_voc_dict['classes'])}) on {annotation_xml}")
+            continue
+
+        raw_image, key = open_image(annotation, images_dir)
+        if not raw_image:
+            continue
+
+        tf_example = build_example(pascal_voc_dict, raw_image, key)
+        writer.write(tf_example.SerializeToString())
+
+        if use_dataset_augmentation:
+
+            np_image = np.fromstring(raw_image, np.uint8)
+            image = cv2.imdecode(np_image, cv2.IMREAD_COLOR)
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+            tf_examples = augment_image(images_dir, pascal_voc_dict, image, augmentation_list)
+
+            for tf_example in tf_examples:
+                writer.write(tf_example.SerializeToString())
+
+    writer.close()
+    logging.info(f'Wrote {out_file}')
+
+
+def get_image_dimensions(annotation, images_dir):
+
+    img_path = os.path.join(
+        images_dir, annotation['filename'].replace('set_01', '').replace(".xml", ".jpg")
+    )
+
+    try:
+        width = int(annotation['size']['width'])
+        height = int(annotation['size']['height'])
+    except KeyError:
+        im = cv2.imread(img_path)
+        height, width, _ = im.shape
+    width = width if width > 0 else 416
+    height = height if height > 0 else 416
+
+    return height, width
+
+
+def parse_pascal_voc(annotation, class_map, height, width) -> DefaultDict:
+
+    pascal_voc_dict: DefaultDict = DefaultDict(list)
+    pascal_voc_dict['filename'] = annotation['filename']
+
+    if 'object' in annotation:
+        for obj in annotation['object']:
+            if not obj['name'] in class_map:
+                logging.warning(f"weird name {obj['name']}")
+                return
+
+            if float(obj['bndbox']['xmin']) > width or float(obj['bndbox']['xmin']) < 0:
+                logging.warning(f"bad xmin {obj['bndbox']['xmin']}")
+                return
+
+            if float(obj['bndbox']['ymin']) > height or float(obj['bndbox']['ymin']) < 0:
+                logging.warning(f"bad ymin {obj['bndbox']['ymin']}")
+                return
+
+            if float(obj['bndbox']['xmax']) > width or float(obj['bndbox']['xmax']) < 0:
+                logging.warning(f"bad xmax {obj['bndbox']['xmax']}")
+                return
+
+            if float(obj['bndbox']['ymax']) > height or float(obj['bndbox']['ymax']) < 0:
+                logging.warning(f"bad ymax {obj['bndbox']['ymax']}")
+                return
+
+            difficult = bool(int(obj['difficult']))
+            pascal_voc_dict['difficult'].append(int(difficult))
+            pascal_voc_dict['xmin'].append(float(obj['bndbox']['xmin']) / width)
+            pascal_voc_dict['ymin'].append(float(obj['bndbox']['ymin']) / height)
+            pascal_voc_dict['xmax'].append(float(obj['bndbox']['xmax']) / width)
+            pascal_voc_dict['ymax'].append(float(obj['bndbox']['ymax']) / height)
+            pascal_voc_dict['classes_text'].append(obj['name'].encode('utf8'))
+            pascal_voc_dict['classes'].append(class_map[obj['name']])
+            pascal_voc_dict['height'].append(height)
+            pascal_voc_dict['width'].append(width)
+
+    return pascal_voc_dict
+
+
+def open_image(annotation, images_dir):
+
+    img_path = os.path.join(
+        images_dir, annotation['filename'].replace('set_01', '').replace(".xml", ".jpg")
+    )
+
+    try:
+        raw_image = open(img_path, 'rb').read()
+    except:
+        logging.warning(f'Could not open {annotation["filename"]} at {images_dir}')
+        return None, None
+
+    key = hashlib.sha256(raw_image).hexdigest()
+
+    if raw_image[0] != 255 and raw_image[0] != 137:
+        logging.warning(f"raw {raw_image[0]}")
+        logging.warning(f"bad image {img_path}")
+        return None, None
+
+    return raw_image, key
+
+
+def augment_image(images_dir, xml_data_dict, image, augmentation_list):
+
+    build_examples: list = []
+
+    bounding_boxes = parse_bounding_boxes(xml_data_dict)
+    image_name = xml_data_dict['filename'].replace('set_01', '').replace(".xml", ".jpg")
+
+    for (transform, aug_name) in augmentation_list:
+        aug_image = transform(image=image, bboxes=bounding_boxes)
+
+        encoded_image = cv2.imencode('.jpg', cv2.cvtColor(aug_image['image'], cv2.COLOR_RGB2BGR))[1].tostring()
+
+        key = hashlib.sha256(encoded_image).hexdigest()
+        file_name = image_name.replace('.jpg', f'--{aug_name}.jpg')
+
+        image_dict = build_augmented_image_dict(aug_image, xml_data_dict)
+        image_dict['filename'] = file_name
+        build_examples.append(build_example(image_dict, encoded_image, key))
+
+    return build_examples
+
+
+def build_augmented_image_dict(aug_image, xml_data_dict):
+
+    bbox_dict = get_bbox_dict(aug_image['bboxes'])
+
+    augmented_image_dict: DefaultDict = DefaultDict(list)
+
+    augmented_image_dict['height'].append(aug_image['image'].shape[0])
+    augmented_image_dict['width'].append(aug_image['image'].shape[1])
+    augmented_image_dict['truncated'] = xml_data_dict['truncated']
+    augmented_image_dict['views'] = xml_data_dict['views']
+    augmented_image_dict['difficult'] = xml_data_dict['difficult']
+    augmented_image_dict['classes_text'] = xml_data_dict['classes_text']
+
+    # Union both dicts
+    augmented_image_dict = {**augmented_image_dict, **bbox_dict}
+
+    return augmented_image_dict
+
+
+def get_bbox_dict(bbox_list) -> dict:
+
+    bbox_dict: DefaultDict = DefaultDict(list)
+
+    for bbox in bbox_list:
+        bbox_dict['xmin'].append(bbox[0])
+        bbox_dict['ymin'].append(bbox[1])
+        bbox_dict['xmax'].append(bbox[2])
+        bbox_dict['ymax'].append(bbox[3])
+        bbox_dict['classes'].append(bbox[4])
+    
+    return bbox_dict
+
+
+def parse_bounding_boxes(xml_data_dict: dict) -> list:
+    
+    bounding_boxes: list = []
+
+    for i in range(len(xml_data_dict['xmin'])):
+        bounding_boxes.append([
+            xml_data_dict['xmin'][i],
+            xml_data_dict['ymin'][i],
+            xml_data_dict['xmax'][i],
+            xml_data_dict['ymax'][i],
+            xml_data_dict['classes'][i]
+        ])
+
+    return bounding_boxes
+
+
+def build_default_augmentation_pipeline() -> list:
+
+    # p is probability we set it allways to be 1 as for now we don't want randomness here
+    # albumentations uses the random python lib to set it's seed.
+    random.seed(4)
+    transformations: list = []
+
+    # albumentations format is pascal_voc, but divided by height and width
+
+    # Blur augmentation
+    transformations.append(A.Compose([
+        A.Blur(blur_limit=(3,3), always_apply=True, p=1)
+        ],
+        bbox_params=A.BboxParams(format='albumentations')
+    ))
+
+    # HorizontalFlip augmentation
+    transformations.append(A.Compose([
+        A.HorizontalFlip(p=1)
+        ],
+        bbox_params=A.BboxParams(format='albumentations')
+    ))
+
+    # Contrast Limited Adaptive Histogram Equalization augmentation
+    transformations.append(A.Compose([
+        A.CLAHE(always_apply=True, p=1)
+        ],
+        bbox_params=A.BboxParams(format='albumentations')
+    ))
+
+    # Sepia augmentation
+    transformations.append(A.Compose([
+        A.ToSepia(always_apply=True, p=1)
+        ],
+        bbox_params=A.BboxParams(format='albumentations')
+    ))
+    # GaussNoise augmentation, very hard to see with eyes as it gives noise to some pixels
+    transformations.append(A.Compose([
+        A.GaussNoise(var_limit=(10.0, 50.0), mean=1, always_apply=True, p=1)
+        ],
+        bbox_params=A.BboxParams(format='albumentations')
+    ))
+    
+    aug_names: list = [
+        'Blur', 'HorizontalFlip', 'Contrast', 'Sepia', 'GaussNoise'
+    ]
+
+    return list(zip(transformations, aug_names))

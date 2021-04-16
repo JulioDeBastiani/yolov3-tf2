@@ -12,11 +12,12 @@ flags.DEFINE_string('train_data_dir', '/run/media/juju/backup_loja/set_03/train_
                     'path to the train images')
 flags.DEFINE_string('val_data_dir', '/run/media/juju/backup_loja/set_03/val_data',
                     'path to the validation images')
-flags.DEFINE_string('output_train_file', './data/set_03_train.tfrecord', 'outpot dataset')
-flags.DEFINE_string('output_val_file', './data/set_03_val.tfrecord', 'outpot dataset')
-flags.DEFINE_string('classes', './data/person-det.names', 'classes file')
+flags.DEFINE_string('output_train_file', './data/set_03_train.tfrecord', 'output train tfrecord')
+flags.DEFINE_string('output_val_file', './data/set_03_val.tfrecord', 'output validation tfrecord')
+flags.DEFINE_string('classes', './data/face-det.names', 'classes file')
 
-flags.DEFINE_bool('data_augmentation', False, 'Chooses if using data augmentation or not')
+flags.DEFINE_bool('use_data_augmentation', False,
+                  'Weather or not to increase the train dataset with image augmentation')
 
 
 def main(_argv):
@@ -29,14 +30,14 @@ def main(_argv):
         FLAGS.output_train_file,
         FLAGS.train_labels_dir,
         FLAGS.train_data_dir,
-        FLAGS.data_augmentation
+        FLAGS.use_data_augmentation
     )
     parse_set(
         class_map,
         FLAGS.output_val_file,
         FLAGS.val_labels_dir,
         FLAGS.val_data_dir,
-        FLAGS.data_augmentation
+        False
     )
 
     logging.info("Done")

@@ -4,24 +4,27 @@ from absl.flags import FLAGS
 import cv2
 import numpy as np
 import tensorflow as tf
+
 from yolov3_tf2.models import (
     YoloV3, YoloV3Tiny
 )
 from yolov3_tf2.dataset import load_tfrecord_dataset, transform_images
 from yolov3_tf2.utils import draw_outputs
 
+
 flags.DEFINE_string('classes', './data/coco.names', 'path to classes file')
 flags.DEFINE_integer('size', 416, 'resize images to')
 flags.DEFINE_string(
     'dataset', './data/voc2012_train.tfrecord', 'path to dataset')
 flags.DEFINE_string('output', './output.jpg', 'path to output image')
+flags.DEFINE_integer('max_yolo_boxes', 100, 'The max quanttity of boxes for the yolo model')
 
 
 def main(_argv):
     class_names = [c.strip() for c in open(FLAGS.classes).readlines()]
     logging.info('classes loaded')
 
-    dataset = load_tfrecord_dataset(FLAGS.dataset, FLAGS.classes, FLAGS.size)
+    dataset = load_tfrecord_dataset(FLAGS.dataset, FLAGS.classes, FLAGS.size, FLAGS.max_yolo_boxes)
     dataset = dataset.shuffle(512)
 
     for image, labels in dataset.take(1):
