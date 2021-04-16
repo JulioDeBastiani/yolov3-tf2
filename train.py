@@ -10,6 +10,8 @@ from tensorflow.keras.callbacks import (
     ModelCheckpoint,
     TensorBoard
 )
+
+from yolov3_tf2.dataset import build_default_augmentation_pipeline
 from yolov3_tf2.models import (
     YoloV3, YoloV3Tiny, YoloLoss,
     yolo_anchors, yolo_anchor_masks,
@@ -68,6 +70,7 @@ flags.DEFINE_boolean('tiny', False,
 
 
 def main(_argv):
+
     physical_devices = tf.config.experimental.list_physical_devices('GPU')
     if len(physical_devices) > 0:
         tf.config.experimental.set_memory_growth(physical_devices[0], True)
@@ -85,11 +88,13 @@ def main(_argv):
     train_dataset = dataset.load_fake_dataset()
 
     if FLAGS.use_data_augmentation:
+        transformations, _ = build_default_augmentation_pipeline()
+        
         train_dataset = tf.data.Dataset.from_generator(
             augment_dataset_generator,
             output_types=(tf.float32, tf.float32),
             output_shapes=(tf.TensorShape([FLAGS.size, FLAGS.size, 3]), tf.TensorShape([None, 5])),
-            args=(FLAGS.dataset, FLAGS.classes, FLAGS.size, anchors, anchor_masks)
+            args=(FLAGS.dataset, FLAGS.classes, FLAGS.size, anchors, anchor_masks, transformations)
         )
         train_dataset = train_dataset.shuffle(buffer_size=512)
         train_dataset = train_dataset.batch(FLAGS.batch_size)

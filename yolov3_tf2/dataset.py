@@ -171,19 +171,28 @@ def get_directory_xml_files(directory_path, img_format):
                     set_files.append(file)
 
     return set_files
+
+
 def parse_xml(xml):
+
     if not len(xml):
         return {xml.tag: xml.text}
+
     result = {}
+
     for child in xml:
         child_result = parse_xml(child)
+
         if child.tag != 'object':
             result[child.tag] = child_result[child.tag]
         else:
             if child.tag not in result:
                 result[child.tag] = []
             result[child.tag].append(child_result[child.tag])
+
     return {xml.tag: result}
+
+
 def build_example(xml_data_dict, bytes_image, key):
 
     return tf.train.Example(features=tf.train.Features(feature={
@@ -222,72 +231,6 @@ def open_image(annotation, images_dir, xml_data_dict):
     return raw_image, key
 
 
-def get_bounding_boxes(xml_data_dict: dict) -> list:
-    
-    bounding_boxes: list = []
-
-    for i in range(len(xml_data_dict['xmin'])):
-        bounding_boxes.append([
-            xml_data_dict['xmin'][i],
-            xml_data_dict['ymin'][i],
-            xml_data_dict['xmax'][i],
-            xml_data_dict['ymax'][i],
-            'person'
-        ])
-
-    return bounding_boxes
-
-
-def get_default_augmentation_pipeline() -> list:
-
-    # p is probability we set it allways to be 1 as for now we don't want randomness here
-    # albumentations uses the random python lib to set it's seed.
-    random.seed(4)
-    transformations: list = []
-
-    # albumentations format is pascal_voc, but divided by height and width
-
-    # Blur augmentation
-    transformations.append(A.Compose([
-        A.Blur(blur_limit=(3,3), always_apply=True, p=1)
-        ],
-        bbox_params=A.BboxParams(format='albumentations')
-    ))
-
-    # HorizontalFlip augmentation
-    transformations.append(A.Compose([
-        A.HorizontalFlip(p=1)
-        ],
-        bbox_params=A.BboxParams(format='albumentations')
-    ))
-
-    # Contrast Limited Adaptive Histogram Equalization augmentation
-    transformations.append(A.Compose([
-        A.CLAHE(always_apply=True, p=1)
-        ],
-        bbox_params=A.BboxParams(format='albumentations')
-    ))
-
-    # Sepia augmentation
-    transformations.append(A.Compose([
-        A.ToSepia(always_apply=True, p=1)
-        ],
-        bbox_params=A.BboxParams(format='albumentations')
-    ))
-    # GaussNoise augmentation, very hard to see with eyes as it gives noise to some spots
-    transformations.append(A.Compose([
-        A.GaussNoise(var_limit=(10.0, 50.0), mean=1, always_apply=True, p=1)
-        ],
-        bbox_params=A.BboxParams(format='albumentations')
-    ))
-    
-    aug_names: list = [
-        'Blur', 'HorizontalFlip', 'Contrast', 'Sepia', 'GaussNoise'
-    ]
-
-    return transformations, aug_names
-
-
 def augment_dataset(dataset, classes, size):
 
     dataset_tensor = []
@@ -302,7 +245,7 @@ def augment_dataset(dataset, classes, size):
     zero_removed_array = y_train[np.any(y_train > 0, axis=1)]
 
     labels = tf.convert_to_tensor(zero_removed_array[:,4:5], tf.float32)
-    transformations, _ = get_default_augmentation_pipeline()
+    transformations, _ = build_default_augmentation_pipeline()
     x_train_tensor = []
     y_train_tensor = []
 
@@ -346,7 +289,7 @@ def augment_dataset(dataset, classes, size):
     return dataset_tensor
 
 
-def augment_dataset_generator(file_pattern, class_file, size, anchors, anchor_masks):
+def augment_dataset_generator(file_pattern, class_file, size, anchors, anchor_masks, transformations):
 
     LINE_NUMBER = -1  # TODO: use tf.lookup.TextFileIndex.LINE_NUMBER
     class_table = tf.lookup.StaticHashTable(tf.lookup.TextFileInitializer(
@@ -355,8 +298,6 @@ def augment_dataset_generator(file_pattern, class_file, size, anchors, anchor_ma
     files = tf.data.Dataset.list_files(file_pattern)
     dataset = files.flat_map(tf.data.TFRecordDataset)
 
-    transformations, _ = get_default_augmentation_pipeline()
-    
     for instance in dataset:
 
         example = tf.io.parse_single_example(instance, IMAGE_FEATURE_MAP)
