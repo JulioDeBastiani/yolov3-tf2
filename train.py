@@ -39,7 +39,7 @@ flags.DEFINE_integer('epochs', 2,
 flags.DEFINE_integer('batch_size', 8,
                      'batch size')
 flags.DEFINE_integer('num_classes', 80, 'number of classes in the model')
-flags.DEFINE_integer('weights_num_classes', 2, 
+flags.DEFINE_integer('weights_num_classes', 1, 
                      'specify num class for `weights` file if different, '
                      'useful in transfer learning with different number of classes')
 flags.DEFINE_integer('max_yolo_boxes', 100,
@@ -88,13 +88,11 @@ def main(_argv):
     train_dataset = dataset.load_fake_dataset()
 
     if FLAGS.use_data_augmentation:
-        transformations, _ = build_default_augmentation_pipeline()
-        
         train_dataset = tf.data.Dataset.from_generator(
             augment_dataset_generator,
             output_types=(tf.float32, tf.float32),
             output_shapes=(tf.TensorShape([FLAGS.size, FLAGS.size, 3]), tf.TensorShape([None, 5])),
-            args=(FLAGS.dataset, FLAGS.classes, FLAGS.size, anchors, anchor_masks, transformations)
+            args=(FLAGS.dataset, FLAGS.classes, FLAGS.size, anchors, anchor_masks)
         )
         train_dataset = train_dataset.shuffle(buffer_size=512)
         train_dataset = train_dataset.batch(FLAGS.batch_size)

@@ -231,65 +231,9 @@ def open_image(annotation, images_dir, xml_data_dict):
     return raw_image, key
 
 
-def augment_dataset(dataset, classes, size):
+def augment_dataset_generator(file_pattern, class_file, size, anchors, anchor_masks):
 
-    dataset_tensor = []
-
-    # for instance in dataset:
-    
-    img = cv2.cvtColor(instance[0].numpy(), cv2.COLOR_RGB2BGR)
-    # this transformation is due clahe supporting only this type
-    img = img.astype(np.uint8)
-
-    y_train = instance[1].numpy()
-    zero_removed_array = y_train[np.any(y_train > 0, axis=1)]
-
-    labels = tf.convert_to_tensor(zero_removed_array[:,4:5], tf.float32)
-    transformations, _ = build_default_augmentation_pipeline()
-    x_train_tensor = []
-    y_train_tensor = []
-
-
-    for transform in transformations:
-
-        aug_image = transform(image=img, bboxes=zero_removed_array)
-
-        encoded_img = cv2.imencode('.jpg', cv2.cvtColor(aug_image['image'], cv2.COLOR_RGB2BGR))[1].tostring()
-        x_train = tf.image.decode_jpeg(encoded_img, channels=3)
-        x_train /= 255
-        
-        aug_image['bboxes'] = np.asarray(aug_image['bboxes'])
-
-        y_train = tf.stack([
-            tf.convert_to_tensor(aug_image['bboxes'][:,0:1], dtype=tf.float32),
-            tf.convert_to_tensor(aug_image['bboxes'][:,1:2], dtype=tf.float32),
-            tf.convert_to_tensor(aug_image['bboxes'][:,2:3], dtype=tf.float32),
-            tf.convert_to_tensor(aug_image['bboxes'][:,3:4], dtype=tf.float32),
-            labels
-            ],
-            axis=1
-        )
-
-        y_train = tf.squeeze(y_train, axis=2)
-
-        if x_train_tensor == []:
-            x_train_tensor = tf.data.Dataset.from_tensor_slices(tf.expand_dims(x_train, 0))
-            y_train_tensor = tf.data.Dataset.from_tensor_slices(y_train)
-        else:
-            x_train_tensor = x_train_tensor.concatenate(tf.data.Dataset.from_tensor_slices(
-                tf.expand_dims(x_train, 0)
-            ))
-            y_train_tensor = y_train_tensor.concatenate(tf.data.Dataset.from_tensor_slices(
-                y_train
-            ))
-                
-
-        dataset_tensor = tf.data.Dataset.zip((x_train_tensor, y_train_tensor))
-
-    return dataset_tensor
-
-
-def augment_dataset_generator(file_pattern, class_file, size, anchors, anchor_masks, transformations):
+    augmentation_list = build_default_augmentation_pipeline()
 
     LINE_NUMBER = -1  # TODO: use tf.lookup.TextFileIndex.LINE_NUMBER
     class_table = tf.lookup.StaticHashTable(tf.lookup.TextFileInitializer(
@@ -321,7 +265,7 @@ def augment_dataset_generator(file_pattern, class_file, size, anchors, anchor_ma
 
         yield transform_images(x_train, size), y_train
 
-        for transformation in transformations:
+        for (transformation, _) in augmentation_list:
             yield apply_transformation(transformation, raw_image, y_train, size, anchors, anchor_masks)
 
 
