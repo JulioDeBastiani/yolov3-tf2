@@ -25,7 +25,7 @@ flags.DEFINE_string('val_dataset', '',
                     'path to validation dataset')
 flags.DEFINE_string('weights', './checkpoints/yolov3.tf',
                     'path to weights file')
-flags.DEFINE_string('classes', './data/face-det.names',
+flags.DEFINE_string('classes', './data/coco.names',
                     'path to classes file')
 flags.DEFINE_string('checkpoints', './out',
                     'folder to save the checkpoints to')
