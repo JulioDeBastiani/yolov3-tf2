@@ -273,8 +273,6 @@ def apply_transformation(transformation, raw_image, y_train, size, anchors, anch
 
     img = cv2.cvtColor(raw_image.numpy(), cv2.COLOR_BGR2RGB)
 
-    img = img.astype(np.uint8)
-
     y_train = y_train.numpy()
     
     zero_removed_array = y_train[np.any(y_train > 0, axis=1)]
