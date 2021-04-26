@@ -173,7 +173,7 @@ def get_directory_xml_files(directory_path, img_format):
     return set_files
 
 
-def parse_xml(xml):
+def xml_to_dict(xml):
 
     if not len(xml):
         return {xml.tag: xml.text}
@@ -181,7 +181,7 @@ def parse_xml(xml):
     result = {}
 
     for child in xml:
-        child_result = parse_xml(child)
+        child_result = xml_to_dict(child)
 
         if child.tag != 'object':
             result[child.tag] = child_result[child.tag]
@@ -321,7 +321,7 @@ def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augm
 
         annotation_xml = os.path.join(annotations_dir, annotation_file)
         annotation_xml = lxml.etree.fromstring(open(annotation_xml).read())
-        annotation = parse_xml(annotation_xml)['annotation']
+        annotation = xml_to_dict(annotation_xml)['annotation']
 
         height, width = get_image_dimensions(annotation, images_dir)
         pascal_voc_dict = parse_pascal_voc(annotation, class_map, height, width)
