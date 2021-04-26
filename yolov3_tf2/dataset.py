@@ -112,8 +112,6 @@ IMAGE_FEATURE_MAP = {
 def parse_tfrecord(tfrecord, class_table, size, max_yolo_boxes):
     x = tf.io.parse_single_example(tfrecord, IMAGE_FEATURE_MAP)
     x_train = tf.image.decode_jpeg(x['image/encoded'], channels=3)
-
-    x_train = tf.image.resize(x_train, (size, size))
     
     class_text = tf.sparse.to_dense(
         x['image/object/class/text'], default_value='')
@@ -248,8 +246,6 @@ def augment_dataset_generator(file_pattern, class_file, size, anchors, anchor_ma
 
         raw_image = tf.image.decode_image(example['image/encoded'], channels=3)
 
-        x_train = tf.image.resize(raw_image, (size, size))
-        #print(np.asarray(example['image/object/bbox/xmin']), end='x_obj\n')
         class_text = tf.sparse.to_dense(example['image/object/class/text'], default_value='')
         labels = tf.cast(class_table.lookup(class_text), tf.float32)
 
@@ -263,7 +259,7 @@ def augment_dataset_generator(file_pattern, class_file, size, anchors, anchor_ma
 
         y_train = pad_tensor(y_train, 100)
 
-        yield preprocess_image(x_train, size), y_train
+        yield preprocess_image(raw_image, size), y_train
 
         for (transformation, _) in augmentation_list:
             yield apply_transformation(transformation, raw_image, y_train, size, anchors, anchor_masks)
