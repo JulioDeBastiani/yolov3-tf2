@@ -4,7 +4,7 @@ from tqdm import tqdm
 import cv2
 import os
 
-from yolov3_tf2.dataset import transform_images, load_tfrecord_dataset
+from yolov3_tf2.dataset import preprocess_image, load_tfrecord_dataset
 
 flags.DEFINE_string('tfrecord_path', None, 
                     'Path to the tfrecord to load and test')

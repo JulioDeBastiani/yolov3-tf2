@@ -6,7 +6,7 @@ import numpy as np
 import tensorflow as tf
 
 from yolov3_tf2.models import YoloV3, YoloV3Tiny
-from yolov3_tf2.dataset import transform_images, load_tfrecord_dataset
+from yolov3_tf2.dataset import preprocess_image, load_tfrecord_dataset
 from yolov3_tf2.utils import draw_outputs
 
 flags.DEFINE_string('classes', './data/coco.names',
@@ -57,7 +57,7 @@ def main(_argv):
             open(FLAGS.image, 'rb').read(), channels=3)
 
     img = tf.expand_dims(img_raw, 0)
-    img = transform_images(img, FLAGS.size)
+    img = preprocess_image(img, FLAGS.size)
 
     t1 = time.time()
     boxes, scores, classes, nums = yolo(img)

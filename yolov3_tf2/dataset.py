@@ -81,7 +81,7 @@ def transform_targets(y_train, anchors, anchor_masks, size):
     return tuple(y_outs)
 
 
-def transform_images(x_train, size):
+def preprocess_image(x_train, size):
     x_train = tf.image.resize(x_train, (size, size))
     x_train = x_train / 255
     return x_train
@@ -263,7 +263,7 @@ def augment_dataset_generator(file_pattern, class_file, size, anchors, anchor_ma
 
         y_train = pad_tensor(y_train, 100)
 
-        yield transform_images(x_train, size), y_train
+        yield preprocess_image(x_train, size), y_train
 
         for (transformation, _) in augmentation_list:
             yield apply_transformation(transformation, raw_image, y_train, size, anchors, anchor_masks)
@@ -301,7 +301,7 @@ def apply_transformation(transformation, raw_image, y_train, size, anchors, anch
     y_train = pad_tensor(y_train, 100)
     x_train = tf.convert_to_tensor(x_train)
 
-    return transform_images(x_train, size), y_train
+    return preprocess_image(x_train, size), y_train
 
 
 def pad_tensor(tensor, pad_size):

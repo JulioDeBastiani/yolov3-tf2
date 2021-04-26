@@ -107,7 +107,7 @@ def main(_argv):
         train_dataset = train_dataset.shuffle(buffer_size=512)
         train_dataset = train_dataset.batch(FLAGS.batch_size)
         train_dataset = train_dataset.map(lambda x, y: (
-            dataset.transform_images(x, FLAGS.size),
+            dataset.preprocess_image(x, FLAGS.size),
             dataset.transform_targets(y, anchors, anchor_masks, FLAGS.size)
         ))
 
@@ -121,7 +121,7 @@ def main(_argv):
             FLAGS.val_dataset, FLAGS.classes, FLAGS.size, FLAGS.max_yolo_boxes)
     val_dataset = val_dataset.batch(FLAGS.batch_size)
     val_dataset = val_dataset.map(lambda x, y: (
-        dataset.transform_images(x, FLAGS.size),
+        dataset.preprocess_image(x, FLAGS.size),
         dataset.transform_targets(y, anchors, anchor_masks, FLAGS.size)))
 
     # Configure the model for transfer learning

@@ -7,7 +7,7 @@ import tensorflow as tf
 from yolov3_tf2.models import (
     YoloV3, YoloV3Tiny
 )
-from yolov3_tf2.dataset import transform_images
+from yolov3_tf2.dataset import preprocess_image
 
 from tensorflow.python.eager import def_function
 from tensorflow.python.framework import tensor_spec
@@ -50,7 +50,7 @@ def main(_argv):
 
     img = tf.image.decode_image(open(FLAGS.image, 'rb').read(), channels=3)
     img = tf.expand_dims(img, 0)
-    img = transform_images(img, 416)
+    img = preprocess_image(img, 416)
 
     t1 = time.time()
     outputs = interpreter.set_tensor(input_details[0]['index'], img)
