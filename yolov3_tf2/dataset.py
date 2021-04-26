@@ -128,7 +128,7 @@ def parse_tfrecord(tfrecord, class_table, size, max_yolo_boxes):
     ], axis=1)
 
     # it used a flag to set it the max boxes possible
-    y_train = add_pads_to_tensor(y_train, max_yolo_boxes)
+    y_train = pad_tensor(y_train, max_yolo_boxes)
 
     return x_train, y_train
 
@@ -261,7 +261,7 @@ def augment_dataset_generator(file_pattern, class_file, size, anchors, anchor_ma
             labels
         ], axis=1)
 
-        y_train = add_pads_to_tensor(y_train, 100)
+        y_train = pad_tensor(y_train, 100)
 
         yield transform_images(x_train, size), y_train
 
@@ -298,13 +298,13 @@ def apply_transformation(transformation, raw_image, y_train, size, anchors, anch
         axis=1
     )
     y_train = tf.squeeze(y_train, axis=2)
-    y_train = add_pads_to_tensor(y_train, 100)
+    y_train = pad_tensor(y_train, 100)
     x_train = tf.convert_to_tensor(x_train)
 
     return transform_images(x_train, size), y_train
 
 
-def add_pads_to_tensor(tensor, pad_size):
+def pad_tensor(tensor, pad_size):
 
     paddings = [[0, pad_size - tf.shape(tensor)[0]], [0, 0]]
     return tf.pad(tensor, paddings)
