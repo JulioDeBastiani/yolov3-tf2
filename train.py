@@ -10,6 +10,8 @@ from tensorflow.keras.callbacks import (
     ModelCheckpoint,
     TensorBoard
 )
+
+from yolov3_tf2.dataset import build_default_augmentation_pipeline
 from yolov3_tf2.models import (
     YoloV3, YoloV3Tiny, YoloLoss,
     yolo_anchors, yolo_anchor_masks,
@@ -17,37 +19,58 @@ from yolov3_tf2.models import (
 )
 from yolov3_tf2.utils import freeze_all
 import yolov3_tf2.dataset as dataset
+from yolov3_tf2.dataset import augment_dataset_generator
 
-flags.DEFINE_string('dataset', '', 'path to dataset')
-flags.DEFINE_string('val_dataset', '', 'path to validation dataset')
-flags.DEFINE_boolean('tiny', False, 'yolov3 or yolov3-tiny')
+flags.DEFINE_string('dataset', '',
+                    'path to dataset')
+flags.DEFINE_string('val_dataset', '',
+                    'path to validation dataset')
 flags.DEFINE_string('weights', './checkpoints/yolov3.tf',
                     'path to weights file')
-flags.DEFINE_string('classes', './data/coco.names', 'path to classes file')
-flags.DEFINE_enum('mode', 'fit', ['fit', 'eager_fit', 'eager_tf'],
+flags.DEFINE_string('classes', './data/coco.names',
+                    'path to classes file')
+flags.DEFINE_string('checkpoints', './out',
+                    'folder to save the checkpoints to')
+
+flags.DEFINE_integer('size', 416,
+                     'image size')
+flags.DEFINE_integer('epochs', 2,
+                     'number of epochs')
+flags.DEFINE_integer('batch_size', 8,
+                     'batch size')
+flags.DEFINE_integer('num_classes', 80, 'number of classes in the model')
+flags.DEFINE_integer('weights_num_classes', 1, 
+                     'specify num class for `weights` file if different, '
+                     'useful in transfer learning with different number of classes')
+flags.DEFINE_integer('max_yolo_boxes', 100,
+                     'The maximum quantity of boxes for the yolo model')
+
+flags.DEFINE_float('learning_rate', 1e-3,
+                   'learning rate')
+
+flags.DEFINE_enum('mode', 'fit',
+                  ['fit', 'eager_fit', 'eager_tf'],
                   'fit: model.fit, '
                   'eager_fit: model.fit(run_eagerly=True), '
                   'eager_tf: custom GradientTape')
-flags.DEFINE_enum('transfer', 'none',
+flags.DEFINE_enum('transfer', 'fine_tune',
                   ['none', 'darknet', 'no_output', 'frozen', 'fine_tune'],
                   'none: Training from scratch, '
                   'darknet: Transfer darknet, '
                   'no_output: Transfer all but output, '
                   'frozen: Transfer and freeze all, '
                   'fine_tune: Transfer all and freeze darknet only')
-flags.DEFINE_integer('size', 416, 'image size')
-flags.DEFINE_integer('epochs', 2, 'number of epochs')
-flags.DEFINE_integer('batch_size', 8, 'batch size')
-flags.DEFINE_float('learning_rate', 1e-3, 'learning rate')
-flags.DEFINE_integer('num_classes', 80, 'number of classes in the model')
-flags.DEFINE_integer('weights_num_classes', None, 'specify num class for `weights` file if different, '
-                     'useful in transfer learning with different number of classes')
-flags.DEFINE_string('checkpoints', '/run/media/juju/backup_loja/checkpoints/regular/train',
-                    'folder to save the checkpoints to')
-flags.DEFINE_integer('max_yolo_boxes', 100, 'The maximum quantity of boxes for the yolo model')
+
+flags.DEFINE_boolean('use_early_stopping', False,
+                     'Chooses if using early stopping or not')
+flags.DEFINE_boolean('use_data_augmentation', False,
+                     'Chooses if using data augmentation or not')
+flags.DEFINE_boolean('tiny', False,
+                     'yolov3 or yolov3-tiny')
 
 
 def main(_argv):
+
     physical_devices = tf.config.experimental.list_physical_devices('GPU')
     if len(physical_devices) > 0:
         tf.config.experimental.set_memory_growth(physical_devices[0], True)
@@ -63,16 +86,34 @@ def main(_argv):
         anchor_masks = yolo_anchor_masks
 
     train_dataset = dataset.load_fake_dataset()
-    if FLAGS.dataset:
+
+    if FLAGS.use_data_augmentation:
+        train_dataset = tf.data.Dataset.from_generator(
+            augment_dataset_generator,
+            output_types=(tf.float32, tf.float32),
+            output_shapes=(tf.TensorShape([FLAGS.size, FLAGS.size, 3]), tf.TensorShape([None, 5])),
+            args=(FLAGS.dataset, FLAGS.classes, FLAGS.size, anchors, anchor_masks)
+        )
+        train_dataset = train_dataset.shuffle(buffer_size=512)
+        train_dataset = train_dataset.batch(FLAGS.batch_size)
+        # TODO add this to the augment pipeline
+        train_dataset = train_dataset.map(lambda x, y: (
+            x,
+            dataset.transform_targets(y, anchors, anchor_masks, FLAGS.size)
+        ))
+    else:
         train_dataset = dataset.load_tfrecord_dataset(
             FLAGS.dataset, FLAGS.classes, FLAGS.size, FLAGS.max_yolo_boxes)
-    train_dataset = train_dataset.shuffle(buffer_size=512)
-    train_dataset = train_dataset.batch(FLAGS.batch_size)
-    train_dataset = train_dataset.map(lambda x, y: (
-        dataset.transform_images(x, FLAGS.size),
-        dataset.transform_targets(y, anchors, anchor_masks, FLAGS.size)))
+        train_dataset = train_dataset.shuffle(buffer_size=512)
+        train_dataset = train_dataset.batch(FLAGS.batch_size)
+        train_dataset = train_dataset.map(lambda x, y: (
+            dataset.preprocess_image(x, FLAGS.size),
+            dataset.transform_targets(y, anchors, anchor_masks, FLAGS.size)
+        ))
+
     train_dataset = train_dataset.prefetch(
-        buffer_size=tf.data.experimental.AUTOTUNE)
+        buffer_size=tf.data.experimental.AUTOTUNE
+    )
 
     val_dataset = dataset.load_fake_dataset()
     if FLAGS.val_dataset:
@@ -80,7 +121,7 @@ def main(_argv):
             FLAGS.val_dataset, FLAGS.classes, FLAGS.size, FLAGS.max_yolo_boxes)
     val_dataset = val_dataset.batch(FLAGS.batch_size)
     val_dataset = val_dataset.map(lambda x, y: (
-        dataset.transform_images(x, FLAGS.size),
+        dataset.preprocess_image(x, FLAGS.size),
         dataset.transform_targets(y, anchors, anchor_masks, FLAGS.size)))
 
     # Configure the model for transfer learning
@@ -97,7 +138,7 @@ def main(_argv):
         else:
             model_pretrained = YoloV3(
                 FLAGS.size, training=True, classes=FLAGS.weights_num_classes or FLAGS.num_classes)
-        model_pretrained.load_weights(FLAGS.weights)
+        model_pretrained.load_weights(FLAGS.weights).expect_partial()
 
         if FLAGS.transfer == 'darknet':
             model.get_layer('yolo_darknet').set_weights(
@@ -113,7 +154,7 @@ def main(_argv):
 
     else:
         # All other transfer require matching classes
-        model.load_weights(FLAGS.weights)
+        model.load_weights(FLAGS.weights).expect_partial()
         if FLAGS.transfer == 'fine_tune':
             # freeze darknet and fine tune other layers
             darknet = model.get_layer('yolo_darknet')
@@ -179,11 +220,12 @@ def main(_argv):
 
         callbacks = [
             ReduceLROnPlateau(verbose=1),
-            EarlyStopping(patience=3, verbose=1),
             ModelCheckpoint(FLAGS.checkpoints + '/yolov3_train_{epoch}.tf',
                             verbose=1, save_weights_only=True),
             TensorBoard(log_dir='logs')
         ]
+        if FLAGS.use_early_stopping:
+            callbacks.append(EarlyStopping(patience=3, verbose=1))
 
         history = model.fit(train_dataset,
                             epochs=FLAGS.epochs,

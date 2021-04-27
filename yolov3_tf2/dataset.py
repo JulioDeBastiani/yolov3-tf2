@@ -54,6 +54,7 @@ def transform_targets_for_output(y_true, grid_size, anchor_idxs):
 
 
 def transform_targets(y_train, anchors, anchor_masks, size):
+
     y_outs = []
     grid_size = size // 32
 
@@ -80,7 +81,7 @@ def transform_targets(y_train, anchors, anchor_masks, size):
     return tuple(y_outs)
 
 
-def transform_images(x_train, size):
+def preprocess_image(x_train, size):
     x_train = tf.image.resize(x_train, (size, size))
     x_train = x_train / 255
     return x_train
@@ -111,19 +112,21 @@ IMAGE_FEATURE_MAP = {
 def parse_tfrecord(tfrecord, class_table, size, max_yolo_boxes):
     x = tf.io.parse_single_example(tfrecord, IMAGE_FEATURE_MAP)
     x_train = tf.image.decode_jpeg(x['image/encoded'], channels=3)
-    x_train = tf.image.resize(x_train, (size, size))
-
+    
     class_text = tf.sparse.to_dense(
         x['image/object/class/text'], default_value='')
     labels = tf.cast(class_table.lookup(class_text), tf.float32)
-    y_train = tf.stack([tf.sparse.to_dense(x['image/object/bbox/xmin']),
-                        tf.sparse.to_dense(x['image/object/bbox/ymin']),
-                        tf.sparse.to_dense(x['image/object/bbox/xmax']),
-                        tf.sparse.to_dense(x['image/object/bbox/ymax']),
-                        labels], axis=1)
 
-    paddings = [[0, max_yolo_boxes - tf.shape(y_train)[0]], [0, 0]]
-    y_train = tf.pad(y_train, paddings)
+    y_train = tf.stack([
+        tf.sparse.to_dense(x['image/object/bbox/xmin']),
+        tf.sparse.to_dense(x['image/object/bbox/ymin']),
+        tf.sparse.to_dense(x['image/object/bbox/xmax']),
+        tf.sparse.to_dense(x['image/object/bbox/ymax']),
+        labels
+    ], axis=1)
+
+    # it used a flag to set it the max boxes possible
+    y_train = pad_tensor(y_train, max_yolo_boxes)
 
     return x_train, y_train
 
@@ -135,6 +138,7 @@ def load_tfrecord_dataset(file_pattern, class_file, size, max_yolo_boxes):
 
     files = tf.data.Dataset.list_files(file_pattern)
     dataset = files.flat_map(tf.data.TFRecordDataset)
+
     return dataset.map(lambda x: parse_tfrecord(x, class_table, size, max_yolo_boxes))
 
 
@@ -152,6 +156,39 @@ def load_fake_dataset():
     y_train = tf.expand_dims(y_train, axis=0)
 
     return tf.data.Dataset.from_tensor_slices((x_train, y_train))
+
+
+def get_directory_xml_files(directory_path, img_format):
+
+    set_files: list = []
+
+    for _, _, files in os.walk(directory_path, topdown=False):
+        for file in files:
+            if file.split('.')[1] == 'xml':
+                if os.path.isfile(os.path.join(directory_path, f'{file.split(".")[0]}.{img_format}')):
+                    set_files.append(file)
+
+    return set_files
+
+
+def xml_to_dict(xml):
+
+    if not len(xml):
+        return {xml.tag: xml.text}
+
+    result = {}
+
+    for child in xml:
+        child_result = xml_to_dict(child)
+
+        if child.tag != 'object':
+            result[child.tag] = child_result[child.tag]
+        else:
+            if child.tag not in result:
+                result[child.tag] = []
+            result[child.tag].append(child_result[child.tag])
+
+    return {xml.tag: result}
 
 
 def build_example(xml_data_dict, bytes_image, key):
@@ -175,21 +212,96 @@ def build_example(xml_data_dict, bytes_image, key):
         'image/object/difficult': tf.train.Feature(int64_list=tf.train.Int64List(value=xml_data_dict['difficult']))
     }))
 
+def open_image(annotation, images_dir, xml_data_dict):
 
-def parse_xml(xml):
-    if not len(xml):
-        return {xml.tag: xml.text}
-    result = {}
-    for child in xml:
-        child_result = parse_xml(child)
-        if child.tag != 'object':
-            result[child.tag] = child_result[child.tag]
-        else:
-            if child.tag not in result:
-                result[child.tag] = []
-            result[child.tag].append(child_result[child.tag])
-    return {xml.tag: result}
+    img_path = os.path.join(
+        images_dir, annotation['filename'].replace('set_01', '').replace(".xml", ".jpg")
+    )
 
+    raw_image = open(img_path, 'rb').read()
+    key = hashlib.sha256(raw_image).hexdigest()
+
+    if raw_image[0] != 255 and raw_image[0] != 137:
+        logging.warning(f"raw {raw_image[0]}")
+        logging.warning(f"bad image {img_path}")
+        raise Exception("bad image")
+    
+    return raw_image, key
+
+
+def augment_dataset_generator(file_pattern, class_file, size, anchors, anchor_masks):
+
+    augmentation_list = build_default_augmentation_pipeline()
+
+    LINE_NUMBER = -1  # TODO: use tf.lookup.TextFileIndex.LINE_NUMBER
+    class_table = tf.lookup.StaticHashTable(tf.lookup.TextFileInitializer(
+        class_file, tf.string, 0, tf.int64, LINE_NUMBER, delimiter="\n"), -1)
+
+    files = tf.data.Dataset.list_files(file_pattern)
+    dataset = files.flat_map(tf.data.TFRecordDataset)
+
+    for instance in dataset:
+
+        example = tf.io.parse_single_example(instance, IMAGE_FEATURE_MAP)
+
+        raw_image = tf.image.decode_image(example['image/encoded'], channels=3)
+
+        class_text = tf.sparse.to_dense(example['image/object/class/text'], default_value='')
+        labels = tf.cast(class_table.lookup(class_text), tf.float32)
+
+        y_train = tf.stack([
+            tf.sparse.to_dense(example['image/object/bbox/xmin']),
+            tf.sparse.to_dense(example['image/object/bbox/ymin']),
+            tf.sparse.to_dense(example['image/object/bbox/xmax']),
+            tf.sparse.to_dense(example['image/object/bbox/ymax']),
+            labels
+        ], axis=1)
+
+        y_train = pad_tensor(y_train, 100)
+
+        yield preprocess_image(raw_image, size), y_train
+
+        for (transformation, _) in augmentation_list:
+            yield apply_transformation(transformation, raw_image, y_train, size, anchors, anchor_masks)
+
+
+def apply_transformation(transformation, raw_image, y_train, size, anchors, anchor_masks):
+
+    img = cv2.cvtColor(raw_image.numpy(), cv2.COLOR_BGR2RGB)
+
+    y_train = y_train.numpy()
+    
+    zero_removed_array = y_train[np.any(y_train > 0, axis=1)]
+
+    labels = tf.convert_to_tensor(zero_removed_array[:,4:5], tf.float32)
+
+    aug_image = transformation(image=img, bboxes=zero_removed_array)
+
+    encoded_img = cv2.imencode('.jpg', cv2.cvtColor(aug_image['image'], cv2.COLOR_RGB2BGR))[1].tostring()
+    x_train = tf.image.decode_jpeg(encoded_img, channels=3)
+
+    aug_image['bboxes'] = np.asarray(aug_image['bboxes'])
+
+    y_train = tf.stack([
+        tf.convert_to_tensor(aug_image['bboxes'][:,0:1], dtype=tf.float32),
+        tf.convert_to_tensor(aug_image['bboxes'][:,1:2], dtype=tf.float32),
+        tf.convert_to_tensor(aug_image['bboxes'][:,2:3], dtype=tf.float32),
+        tf.convert_to_tensor(aug_image['bboxes'][:,3:4], dtype=tf.float32),
+        labels
+        ],
+        axis=1
+    )
+    y_train = tf.squeeze(y_train, axis=2)
+    y_train = pad_tensor(y_train, 100)
+    x_train = tf.convert_to_tensor(x_train)
+
+    return preprocess_image(x_train, size), y_train
+
+
+def pad_tensor(tensor, pad_size):
+
+    paddings = [[0, pad_size - tf.shape(tensor)[0]], [0, 0]]
+    return tf.pad(tensor, paddings)
 
 def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augmentation):
 
@@ -203,7 +315,7 @@ def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augm
 
         annotation_xml = os.path.join(annotations_dir, annotation_file)
         annotation_xml = lxml.etree.fromstring(open(annotation_xml).read())
-        annotation = parse_xml(annotation_xml)['annotation']
+        annotation = xml_to_dict(annotation_xml)['annotation']
 
         height, width = get_image_dimensions(annotation, images_dir)
         pascal_voc_dict = parse_pascal_voc(annotation, class_map, height, width)

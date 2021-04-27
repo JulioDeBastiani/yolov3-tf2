@@ -6,7 +6,7 @@ import tensorflow as tf
 from yolov3_tf2.models import (
     YoloV3, YoloV3Tiny
 )
-from yolov3_tf2.dataset import transform_images
+from yolov3_tf2.dataset import preprocess_image
 from yolov3_tf2.utils import draw_outputs
 
 import numpy as np
@@ -75,7 +75,7 @@ def main(_argv):
 
         img_in = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) 
         img_in = tf.expand_dims(img_in, 0)
-        img_in = transform_images(img_in, FLAGS.size)
+        img_in = preprocess_image(img_in, FLAGS.size)
 
         t1 = time.time()
         boxes, scores, classes, nums = yolo.predict(img_in)

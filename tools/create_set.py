@@ -10,33 +10,25 @@ from absl.flags import FLAGS
 
 from yolov3_tf2.dataset import get_directory_xml_files
 
-flags.DEFINE_string('set_name', None, 'Name of the new set')
-flags.DEFINE_string(
-    'frozen_dataset', None, 'Path to Frozen dataset'
-)
-flags.DEFINE_string(
-    'base_set_path', None, 'Path to the dataset'
-)
-flags.DEFINE_string(
-    'frozen_set_name', 'frozen_set.csv', 'Path to the frozen dataset'
-)
-flags.DEFINE_string(
-    'set_output_folder', None, 'Path to the dataset output'
-)
-flags.DEFINE_string(
-    'images_format', '.jpg', 'The format the images are in.'
-)
+flags.DEFINE_string('set_name', None,
+                    'Name of the new set')
+flags.DEFINE_string('frozen_dataset', None, 
+                    'Path to Frozen dataset')
+flags.DEFINE_string('base_set_path', None,
+                    'Path to the dataset')
+flags.DEFINE_string('frozen_set_name', 'frozen_set.csv',
+                    'Path to the frozen dataset')
+flags.DEFINE_string('set_output_folder', None,
+                    'Path to the dataset output')
+flags.DEFINE_string('images_format', 'jpg',
+                    'The format the images are in.')
 
-flags.DEFINE_float(
-    'set_dev_percentage', .15, 'Percentage of dev created from dataset.'
-)
-flags.DEFINE_float(
-    'set_train_percentage', .7, 'Percentage of train created from dataset.'
-)
-flags.DEFINE_float(
-    'set_val_percentage', .15, 'Percentage of validation created from dataset.'
-)
-
+flags.DEFINE_float('set_dev_percentage', .15,
+                   'Percentage of dev created from dataset.')
+flags.DEFINE_float('set_train_percentage', .7,
+                   'Percentage of train created from dataset.')
+flags.DEFINE_float('set_val_percentage', .15,
+                   'Percentage of validation created from dataset.')
 
 flags.mark_flags_as_required(['set_name', 'base_set_path'])
 
