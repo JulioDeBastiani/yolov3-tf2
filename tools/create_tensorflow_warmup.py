@@ -2,18 +2,23 @@ import os
 import tensorflow as tf
 
 from os import path
-from absl import app, flags
+from absl import app, flags, logging
 from absl.flags import FLAGS
 from tensorflow_serving.apis import model_pb2, predict_pb2, prediction_log_pb2
 
 from yolov3_tf2.dataset import preprocess_image, load_tfrecord_dataset
 
 
-flags.DEFINE_string('dataset', None, 'path to the dataset, labels will be ignored')
-flags.DEFINE_integer('size', 10, 'number of samples to take from the dataset')
-flags.DEFINE_integer('input_size', 416, 'size of the input tensor (a square image with three channels')
-flags.DEFINE_string('model_name', 'persondet', 'name of the model on tensorflow serving')
+flags.DEFINE_string('dataset', None,
+                    'path to the dataset, labels will be ignored')
+flags.DEFINE_string('model_name', 'persondet',
+                    'name of the model on tensorflow serving')
 flags.DEFINE_string('input_tensor', 'input', 'name of the input tensor')
+
+flags.DEFINE_integer('size', 10, 'number of samples to take from the dataset')
+flags.DEFINE_integer('input_size', 416,
+                     'size of the input tensor (a square image with three '
+                     'channels)')
 
 flags.mark_flag_as_required('dataset')
 
@@ -27,7 +32,7 @@ def main(argv):
         if path.isfile(path.join(FLAGS.dataset, f))
     ]
 
-    files = [f for f in files if f.endswith(('.png', 'jpg', 'jpeg'))]
+    files = [f for f in files if f.endswith(('.png', '.jpg', '.jpeg'))]
 
     for file in files:
         img_raw = tf.image.decode_image(open(file, 'rb').read(), channels=3)
@@ -61,8 +66,8 @@ def main(argv):
         )
 
         writer.write(log.SerializeToString())
-        print('"tf_serving_warmup_requests" created with success!')
-        print('to use it paste it to the "<model>/<version>/assets.extra" folder on the serving configuration folder')
+        logging.info('"tf_serving_warmup_requests" created with success!')
+        logging.info('to use it paste it to the "<model>/<version>/assets.extra" folder on the serving configuration folder')
 
 if __name__ == '__main__':
     try:
