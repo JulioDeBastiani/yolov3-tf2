@@ -1,9 +1,7 @@
 absl-py==0.10.0
 albumentations==0.5.2
 tensorflow-gpu==2.1.0
-tensorflow-serving-api==2.4.1
+tensorflow-serving-api==2.1.0
 opencv-python==4.1.1.26
 lxml==4.6.1
 tqdm==4.51.0
-
--e .
