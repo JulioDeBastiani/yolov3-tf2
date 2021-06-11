@@ -1,18 +1,19 @@
 from absl import flags, app, logging
-from typing import DefaultDict
+from absl.flags import FLAGS
+from typing import DefaultDict, Tuple
 import random
 import os
 import sys
 import csv
 import shutil
 import xml.etree.ElementTree as ET
-from absl.flags import FLAGS
+from tqdm import tqdm
 
 from yolov3_tf2.dataset import get_directory_xml_files
 
 flags.DEFINE_string('set_name', None,
                     'Name of the new set')
-flags.DEFINE_string('frozen_dataset', None, 
+flags.DEFINE_string('frozen_dataset', None,
                     'Path to Frozen dataset')
 flags.DEFINE_string('base_set_path', None,
                     'Path to the dataset')
@@ -37,6 +38,9 @@ def main(argv) -> None:
 
     del argv
 
+    # Turns off gpu as it's not required
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
     if FLAGS.set_dev_percentage + FLAGS.set_train_percentage + FLAGS.set_val_percentage != 1:
         logging.error(
             'The datasets percentages does\'t add up, they must sum 1 and now they sum '
@@ -55,7 +59,7 @@ def main(argv) -> None:
 
     persondet_dict: DefaultDict[str, str] = assign_set_to_persondet(set_files)
 
-    for key in persondet_dict.keys():
+    for key in tqdm(persondet_dict.keys(), total=len(persondet_dict.keys())):
         if os.path.exists(f'{FLAGS.base_set_path}/{key}') and os.path.exists(
             f'{FLAGS.base_set_path}/{key.split(".")[0]}.jpg'
         ):
@@ -87,7 +91,7 @@ def create_empty_dataset() -> None:
         csv_writer.writerow(('persondet', 'set'))
 
 
-def assign_set_to_persondet(persondet_path_list: list) -> dict:
+def assign_set_to_persondet(persondet_path_list: list) -> DefaultDict[str, str]:
     """Assign a set to each persondet path that doesn't have one.
 
     Compare the percentage of sets on the csv and assign the
@@ -119,7 +123,7 @@ def assign_set_to_persondet(persondet_path_list: list) -> dict:
     # TODO this should accont in the future that each file can have more tha one id per file
     total_ids: int = len(persondet_path_list)
 
-    subtotal_ids: int = subtotal_train + subtotal_dev + subtotal_val
+    subtotal_ids = subtotal_train + subtotal_dev + subtotal_val
 
     to_be_added: int = total_ids - subtotal_ids
 
@@ -190,10 +194,10 @@ def add_to_dict_selected_persondet(
             csv_writer.writerow((persondet, set_name))
 
     for persorndet in new_persondet_list:
-        csv_data[persorndet]: str = set_name
+        csv_data[persorndet] = set_name
 
 
-def get_csv_data(csv_data: dict) -> (int, int, int, list):
+def get_csv_data(csv_data: dict) -> Tuple[int, int, int, list]:
     """Get data from the frozen set csv.
 
     Compare the percentage of sets on the csv and assign the

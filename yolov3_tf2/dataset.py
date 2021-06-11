@@ -1,6 +1,5 @@
 import tensorflow as tf
-from absl import app, flags, logging
-from absl.flags import FLAGS
+from absl import logging
 import albumentations as A
 import random
 import os
@@ -8,8 +7,9 @@ import hashlib
 import lxml.etree
 import tqdm
 import cv2
-from typing import DefaultDict
+from typing import DefaultDict, Tuple
 import numpy as np
+
 
 @tf.function
 def transform_targets_for_output(y_true, grid_size, anchor_idxs):
@@ -112,7 +112,7 @@ IMAGE_FEATURE_MAP = {
 def parse_tfrecord(tfrecord, class_table, size, max_yolo_boxes):
     x = tf.io.parse_single_example(tfrecord, IMAGE_FEATURE_MAP)
     x_train = tf.image.decode_jpeg(x['image/encoded'], channels=3)
-    
+
     class_text = tf.sparse.to_dense(
         x['image/object/class/text'], default_value='')
     labels = tf.cast(class_table.lookup(class_text), tf.float32)
@@ -212,22 +212,6 @@ def build_example(xml_data_dict, bytes_image, key):
         'image/object/difficult': tf.train.Feature(int64_list=tf.train.Int64List(value=xml_data_dict['difficult']))
     }))
 
-def open_image(annotation, images_dir, xml_data_dict):
-
-    img_path = os.path.join(
-        images_dir, annotation['filename'].replace('set_01', '').replace(".xml", ".jpg")
-    )
-
-    raw_image = open(img_path, 'rb').read()
-    key = hashlib.sha256(raw_image).hexdigest()
-
-    if raw_image[0] != 255 and raw_image[0] != 137:
-        logging.warning(f"raw {raw_image[0]}")
-        logging.warning(f"bad image {img_path}")
-        raise Exception("bad image")
-    
-    return raw_image, key
-
 
 def augment_dataset_generator(file_pattern, class_file, size, anchors, anchor_masks):
 
@@ -270,10 +254,10 @@ def apply_transformation(transformation, raw_image, y_train, size, anchors, anch
     img = cv2.cvtColor(raw_image.numpy(), cv2.COLOR_BGR2RGB)
 
     y_train = y_train.numpy()
-    
+
     zero_removed_array = y_train[np.any(y_train > 0, axis=1)]
 
-    labels = tf.convert_to_tensor(zero_removed_array[:,4:5], tf.float32)
+    labels = tf.convert_to_tensor(zero_removed_array[:, 4: 5], tf.float32)
 
     aug_image = transformation(image=img, bboxes=zero_removed_array)
 
@@ -283,10 +267,10 @@ def apply_transformation(transformation, raw_image, y_train, size, anchors, anch
     aug_image['bboxes'] = np.asarray(aug_image['bboxes'])
 
     y_train = tf.stack([
-        tf.convert_to_tensor(aug_image['bboxes'][:,0:1], dtype=tf.float32),
-        tf.convert_to_tensor(aug_image['bboxes'][:,1:2], dtype=tf.float32),
-        tf.convert_to_tensor(aug_image['bboxes'][:,2:3], dtype=tf.float32),
-        tf.convert_to_tensor(aug_image['bboxes'][:,3:4], dtype=tf.float32),
+        tf.convert_to_tensor(aug_image['bboxes'][:, 0:1], dtype=tf.float32),
+        tf.convert_to_tensor(aug_image['bboxes'][:, 1:2], dtype=tf.float32),
+        tf.convert_to_tensor(aug_image['bboxes'][:, 2:3], dtype=tf.float32),
+        tf.convert_to_tensor(aug_image['bboxes'][:, 3:4], dtype=tf.float32),
         labels
         ],
         axis=1
@@ -303,6 +287,7 @@ def pad_tensor(tensor, pad_size):
     paddings = [[0, pad_size - tf.shape(tensor)[0]], [0, 0]]
     return tf.pad(tensor, paddings)
 
+
 def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augmentation):
 
     writer = tf.io.TFRecordWriter(out_file)
@@ -317,19 +302,17 @@ def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augm
         annotation_xml = lxml.etree.fromstring(open(annotation_xml).read())
         annotation = xml_to_dict(annotation_xml)['annotation']
 
-        height, width = get_image_dimensions(annotation, images_dir)
+        height, width = get_image_dimensions(annotation_file, images_dir)
         pascal_voc_dict = parse_pascal_voc(annotation, class_map, height, width)
 
-        pascal_voc_annotation_dict = parse_pascal_voc(annotation, class_map, height, width)
-
-        if not pascal_voc_annotation_dict:
-            continue            
+        if not pascal_voc_dict:
+            continue
 
         if len(pascal_voc_dict['classes']) > 100:
             logging.error(f"too many classes ({len(pascal_voc_dict['classes'])}) on {annotation_xml}")
             continue
 
-        raw_image, key = open_image(annotation, images_dir)
+        raw_image, key = open_image(annotation_file, images_dir)
         if not raw_image:
             continue
 
@@ -342,7 +325,7 @@ def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augm
             image = cv2.imdecode(np_image, cv2.IMREAD_COLOR)
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-            tf_examples = augment_image(images_dir, pascal_voc_dict, image, augmentation_list)
+            tf_examples = augment_image(pascal_voc_dict, image, augmentation_list)
 
             for tf_example in tf_examples:
                 writer.write(tf_example.SerializeToString())
@@ -351,18 +334,14 @@ def parse_set(class_map, out_file, annotations_dir, images_dir, use_dataset_augm
     logging.info(f'Wrote {out_file}')
 
 
-def get_image_dimensions(annotation, images_dir):
+def get_image_dimensions(annotation_path, images_dir):
 
     img_path = os.path.join(
-        images_dir, annotation['filename'].replace('set_01', '').replace(".xml", ".jpg")
+        images_dir, annotation_path.replace(".xml", ".jpg")
     )
 
-    try:
-        width = int(annotation['size']['width'])
-        height = int(annotation['size']['height'])
-    except KeyError:
-        im = cv2.imread(img_path)
-        height, width, _ = im.shape
+    im = cv2.imread(img_path)
+    height, width, _ = im.shape
     width = width if width > 0 else 416
     height = height if height > 0 else 416
 
@@ -410,16 +389,16 @@ def parse_pascal_voc(annotation, class_map, height, width) -> DefaultDict:
     return pascal_voc_dict
 
 
-def open_image(annotation, images_dir):
+def open_image(xml_filename: str, images_dir: str) -> Tuple[bytes, str]:
 
     img_path = os.path.join(
-        images_dir, annotation['filename'].replace('set_01', '').replace(".xml", ".jpg")
+        images_dir, xml_filename.replace(".xml", ".jpg")
     )
 
     try:
         raw_image = open(img_path, 'rb').read()
     except:
-        logging.warning(f'Could not open {annotation["filename"]} at {images_dir}')
+        logging.warning(f'Could not open {xml_filename} at {images_dir}')
         return None, None
 
     key = hashlib.sha256(raw_image).hexdigest()
@@ -432,7 +411,7 @@ def open_image(annotation, images_dir):
     return raw_image, key
 
 
-def augment_image(images_dir, xml_data_dict, image, augmentation_list):
+def augment_image(xml_data_dict, image, augmentation_list):
 
     build_examples: list = []
 
@@ -440,6 +419,7 @@ def augment_image(images_dir, xml_data_dict, image, augmentation_list):
     image_name = xml_data_dict['filename'].replace('set_01', '').replace(".xml", ".jpg")
 
     for (transform, aug_name) in augmentation_list:
+
         aug_image = transform(image=image, bboxes=bounding_boxes)
 
         encoded_image = cv2.imencode('.jpg', cv2.cvtColor(aug_image['image'], cv2.COLOR_RGB2BGR))[1].tostring()
@@ -483,12 +463,12 @@ def get_bbox_dict(bbox_list) -> dict:
         bbox_dict['xmax'].append(bbox[2])
         bbox_dict['ymax'].append(bbox[3])
         bbox_dict['classes'].append(bbox[4])
-    
+
     return bbox_dict
 
 
 def parse_bounding_boxes(xml_data_dict: dict) -> list:
-    
+
     bounding_boxes: list = []
 
     for i in range(len(xml_data_dict['xmin'])):
@@ -545,7 +525,7 @@ def build_default_augmentation_pipeline() -> list:
         ],
         bbox_params=A.BboxParams(format='albumentations')
     ))
-    
+
     aug_names: list = [
         'Blur', 'HorizontalFlip', 'Contrast', 'Sepia', 'GaussNoise'
     ]

@@ -137,6 +137,7 @@ dmypy.json
 /Untitled.ipynb
 /output.jpg
 /data/voc2012_raw/
-out/* 
+out/*
+*.json
 
 # End of https://www.gitignore.io/api/python

@@ -1,28 +1,31 @@
 import time
 from absl import app, flags, logging
 from absl.flags import FLAGS
-import cv2
-import numpy as np
 import tensorflow as tf
-from yolov3_tf2.models import (
-    YoloV3, YoloV3Tiny
-)
-from yolov3_tf2.dataset import preprocess_image
 
-from tensorflow.python.eager import def_function
-from tensorflow.python.framework import tensor_spec
-from tensorflow.python.util import nest
+from yolov3_tf2.models import YoloV3, YoloV3Tiny
+from yolov3_tf2.dataset import preprocess_image
 
 flags.DEFINE_string('weights', './checkpoints/yolov3.tf',
                     'path to weights file')
-flags.DEFINE_boolean('tiny', False, 'yolov3 or yolov3-tiny')
-flags.DEFINE_string('output', './serving/yolov3/1', 'path to saved_model')
-flags.DEFINE_string('classes', './data/coco.names', 'path to classes file')
-flags.DEFINE_string('image', './data/girl.png', 'path to input image')
-flags.DEFINE_integer('num_classes', 80, 'number of classes in the model')
+flags.DEFINE_string('output', './serving/yolov3/1',
+                    'path to saved_model')
+flags.DEFINE_string('classes', './data/coco.names',
+                    'path to classes file')
+flags.DEFINE_string('image', './data/girl.png',
+                    'path to input image')
+
+flags.DEFINE_integer('num_classes', 80,
+                     'number of classes in the model')
+
+flags.DEFINE_boolean('tiny', False,
+                     'yolov3 or yolov3-tiny')
 
 
 def main(_argv):
+
+    del _argv
+
     if FLAGS.tiny:
         yolo = YoloV3Tiny(classes=FLAGS.num_classes)
     else:
